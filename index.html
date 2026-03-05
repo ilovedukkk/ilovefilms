@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ilovefilms - Смотри любимое</title>
+    <style>
+        :root {
+            --bg-color: #141414;
+            --text-color: #ffffff;
+            --primary-color: #e50914;
+            --header-bg: rgba(20, 20, 20, 0.95);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        :focus {
+            outline: 3px solid var(--primary-color);
+            outline-offset: 2px;
+            box-shadow: 0 0 10px var(--primary-color);
+            border-radius: 4px;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            background: var(--header-bg);
+            padding: 15px 4vw;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .logo {
+            color: var(--primary-color);
+            font-size: 28px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        nav.categories {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            flex: 1;
+            padding: 5px 0;
+            scrollbar-width: none;
+            /* Firefox */
+        }
+
+        nav.categories::-webkit-scrollbar {
+            display: none;
+            /* Safari and Chrome */
+        }
+
+        .category-btn {
+            background: none;
+            border: none;
+            color: #e5e5e5;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 5px 10px;
+            transition: color 0.1s;
+            white-space: nowrap;
+        }
+
+        .category-btn:hover,
+        .category-btn.active {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #444;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        button.icon-btn {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .main-content {
+            padding: 2vw 4vw;
+        }
+
+        h2.section-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+        }
+
+        @media (min-width: 600px) {
+            .grid {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: 20px;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .grid {
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 25px;
+            }
+        }
+
+        .movie-card {
+            position: relative;
+            cursor: pointer;
+            border-radius: 6px;
+            overflow: hidden;
+            transition: transform 0.2s ease;
+            background: #222;
+        }
+
+        .movie-card:hover,
+        .movie-card:focus {
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .movie-card img {
+            width: 100%;
+            height: auto;
+            display: block;
+            aspect-ratio: 2 / 3;
+            object-fit: cover;
+        }
+
+        .movie-card .info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.95));
+            padding: 15px 10px 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .movie-card:hover .info,
+        .movie-card:focus .info {
+            opacity: 1;
+        }
+
+        .movie-card .title {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .movie-card .rating {
+            font-size: 12px;
+            color: #46d369;
+            margin-top: 4px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: #181818;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            display: none;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .movie-backdrop {
+            width: 100%;
+            height: 350px;
+            object-fit: cover;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0));
+            -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0));
+        }
+
+        .movie-details {
+            padding: 0 30px 30px;
+            margin-top: -80px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .movie-details h2 {
+            font-size: 36px;
+            margin: 0 0 10px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        @media (max-width: 600px) {
+            .movie-details h2 {
+                font-size: 24px;
+            }
+
+            .movie-backdrop {
+                height: 250px;
+            }
+
+            .movie-details {
+                margin-top: -60px;
+                padding: 0 20px 20px;
+            }
+        }
+
+        .movie-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            color: #a3a3a3;
+        }
+
+        .movie-overview {
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background: #f40612;
+        }
+
+        .btn-primary:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .settings-content,
+        .torrent-list-content {
+            padding: 40px;
+        }
+
+        .settings-content h3,
+        .torrent-list-content h3 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+
+        .torrent-list {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .torrent-item {
+            background: #222;
+            padding: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s, transform 0.1s;
+            border: 1px solid #333;
+        }
+
+        .torrent-item:hover,
+        .torrent-item:focus {
+            background: #282828;
+            border-color: var(--primary-color);
+            transform: scale(1.01);
+            outline: none;
+            box-shadow: 0 0 15px rgba(229, 9, 20, 0.4);
+        }
+
+        .torrent-item:focus {
+            background: rgba(229, 9, 20, 0.1);
+        }
+
+        .torrent-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+            padding-right: 15px;
+            overflow: hidden;
+        }
+
+        .torrent-title {
+            font-size: 16px;
+            font-weight: bold;
+            word-break: break-all;
+        }
+
+        .torrent-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+            color: #a3a3a3;
+            flex-wrap: wrap;
+        }
+
+        .torrent-seeds {
+            color: #46d369;
+            font-weight: bold;
+        }
+
+        .torrent-tracker {
+            color: #e5b109;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #loading {
+            text-align: center;
+            padding: 20px;
+            color: #a3a3a3;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">ilovefilms</div>
+        <nav class="categories" id="categories"></nav>
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="Поиск фильма..." tabindex="0">
+            <button class="icon-btn" id="settingsBtn" tabindex="0" aria-label="Настройки">⚙️</button>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <h2 class="section-title" id="sectionTitle">Популярные фильмы</h2>
+        <div class="grid" id="moviesGrid"></div>
+        <div id="loading">Загрузка...</div>
+    </main>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <button class="modal-close" id="modalClose" tabindex="0">&times;</button>
+
+        <div class="modal" id="movieModalContent"></div>
+
+        <div class="modal" id="settingsModalContent">
+            <div class="settings-content">
+                <h3>Настройки Торрентов</h3>
+                <div class="form-group">
+                    <label for="tsUrlInput">Адрес локального TorrServe:</label>
+                    <input type="url" id="tsUrlInput" placeholder="http://127.0.0.1:8090" tabindex="0">
+                </div>
+                <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="useJacRedInput" tabindex="0" style="width: 20px; height: 20px;">
+                    <label for="useJacRedInput">Использовать JacRed (рекомендуется)</label>
+                </div>
+                <div class="form-group">
+                    <label for="jacredUrlInput">Зеркало JacRed:</label>
+                    <input type="url" id="jacredUrlInput" placeholder="https://ru.jacred.pro" tabindex="0">
+                </div>
+                <button class="btn-primary" id="saveSettingsBtn" tabindex="0">Сохранить</button>
+            </div>
+        </div>
+
+        <div class="modal" id="torrentsModalContent">
+            <div class="torrent-list-content">
+                <h3>Доступные раздачи</h3>
+                <div id="torrentsListContainer" class="torrent-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = '54daf26b5c698b632ef767ff51e91191';
+        const BASE_URL = 'https://api.themoviedb.org/3';
+        const IMG_URL = 'https://image.tmdb.org/t/p/w500';
+        const BACKDROP_URL = 'https://image.tmdb.org/t/p/w1280';
+
+        let currentPage = 1;
+        let currentEndpoint = '/movie/popular';
+        let currentQuery = '';
+        let isLoading = false;
+        let genres = {};
+        let hasMorePages = true;
+
+        const elements = {
+            grid: document.getElementById('moviesGrid'),
+            search: document.getElementById('searchInput'),
+            categories: document.getElementById('categories'),
+            modalOverlay: document.getElementById('modalOverlay'),
+            movieModal: document.getElementById('movieModalContent'),
+            settingsModal: document.getElementById('settingsModalContent'),
+            torrentsModal: document.getElementById('torrentsModalContent'),
+            torrentsList: document.getElementById('torrentsListContainer'),
+            loading: document.getElementById('loading'),
+            sectionTitle: document.getElementById('sectionTitle')
+        };
+
+        async function init() {
+            await fetchGenres();
+            setupCategories();
+            setupEventListeners();
+            loadSettings();
+            loadMovies();
+        }
+
+        async function fetchGenres() {
+            try {
+                const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=ru-RU`);
+                const data = await res.json();
+                if (data.genres) {
+                    data.genres.forEach(g => genres[g.id] = g.name);
+                }
+            } catch (e) {
+                console.error('Failed to fetch genres');
+            }
+        }
+
+        function setupCategories() {
+            elements.categories.innerHTML = '';
+            const createBtn = (id, name, isPopular) => {
+                const btn = document.createElement('button');
+                btn.className = `category-btn ${isPopular ? 'active' : ''}`;
+                btn.textContent = name;
+                btn.tabIndex = 0;
+                btn.onclick = () => setCategory(id, btn, name);
+                elements.categories.appendChild(btn);
+            };
+
+            createBtn('', 'Популярное', true);
+
+            const importantGenres = [28, 12, 16, 35, 18, 27, 878, 53];
+            importantGenres.forEach(id => {
+                if (genres[id]) createBtn(id, genres[id], false);
+            });
+        }
+
+        function setCategory(genreId, btn, name) {
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+
+            elements.grid.innerHTML = '';
+            currentPage = 1;
+            hasMorePages = true;
+            elements.search.value = '';
+
+            if (genreId === '') {
+                currentEndpoint = '/movie/popular';
+                currentQuery = '';
+                elements.sectionTitle.textContent = 'Популярные фильмы';
+            } else {
+                currentEndpoint = '/discover/movie';
+                currentQuery = `&with_genres=${genreId}`;
+                elements.sectionTitle.textContent = name;
+            }
+            loadMovies();
+        }
+
+        async function loadMovies() {
+            if (isLoading || !hasMorePages) return;
+            isLoading = true;
+            elements.loading.style.display = 'block';
+
+            try {
+                let url = `${BASE_URL}${currentEndpoint}?api_key=${API_KEY}&language=ru-RU&page=${currentPage}${currentQuery}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.results && data.results.length > 0) {
+                    renderMovies(data.results);
+                    currentPage++;
+                } else {
+                    hasMorePages = false;
+                }
+            } catch (e) {
+                console.error("Failed to load movies", e);
+            } finally {
+                isLoading = false;
+                elements.loading.style.display = 'none';
+            }
+        }
+
+        function renderMovies(movies) {
+            movies.forEach(movie => {
+                if (!movie.poster_path) return;
+
+                const card = document.createElement('div');
+                card.className = 'movie-card';
+                card.tabIndex = 0;
+                card.onclick = () => openModal(movie);
+
+                const img = document.createElement('img');
+                img.src = `${IMG_URL}${movie.poster_path}`;
+                img.alt = movie.title;
+                img.loading = 'lazy';
+
+                const info = document.createElement('div');
+                info.className = 'info';
+
+                const title = document.createElement('h3');
+                title.className = 'title';
+                title.textContent = movie.title;
+
+                const rating = document.createElement('div');
+                rating.className = 'rating';
+                rating.innerHTML = `⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}`;
+
+                info.appendChild(title);
+                info.appendChild(rating);
+                card.appendChild(img);
+                card.appendChild(info);
+
+                elements.grid.appendChild(card);
+            });
+        }
+
+        function openModal(movie) {
+            elements.settingsModal.style.display = 'none';
+            elements.torrentsModal.style.display = 'none';
+            elements.movieModal.style.display = 'block';
+
+            const year = movie.release_date ? movie.release_date.split('-')[0] : '';
+            const rating = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
+
+            elements.movieModal.innerHTML = `
+        ${movie.backdrop_path ? `<img class="movie-backdrop" src="${BACKDROP_URL}${movie.backdrop_path}" alt="">` : ''}
+        <div class="movie-details">
+            <h2>${movie.title}</h2>
+            <div class="movie-meta">
+                <span>⭐ ${rating}</span>
+                <span>📅 ${year}</span>
+            </div>
+            <p class="movie-overview">${movie.overview || 'Описание отсутствует.'}</p>
+            <button class="btn-primary" id="playBtn" tabindex="0">
+                ▶ Смотреть через TorrServe
+            </button>
+        </div>
+    `;
+
+            elements.modalOverlay.classList.add('active');
+
+            document.getElementById('playBtn').onclick = () => playWithTorrServe(movie);
+
+            setTimeout(() => {
+                const btn = document.getElementById('playBtn');
+                if (btn) btn.focus();
+            }, 100);
+        }
+
+        function openSettings() {
+            elements.movieModal.style.display = 'none';
+            elements.torrentsModal.style.display = 'none';
+            elements.settingsModal.style.display = 'block';
+            elements.modalOverlay.classList.add('active');
+
+            document.getElementById('tsUrlInput').value = localStorage.getItem('torrserve_url') || 'http://127.0.0.1:8090';
+            document.getElementById('useJacRedInput').checked = localStorage.getItem('use_jacred') === 'true';
+            document.getElementById('jacredUrlInput').value = localStorage.getItem('jacred_url') || 'https://ru.jacred.pro';
+
+            setTimeout(() => {
+                document.getElementById('tsUrlInput').focus();
+            }, 100);
+        }
+
+        function closeAllModals() {
+            elements.modalOverlay.classList.remove('active');
+            setTimeout(() => {
+                elements.movieModal.style.display = 'none';
+                elements.settingsModal.style.display = 'none';
+                elements.torrentsModal.style.display = 'none';
+                // return focus to the first grid item
+                const firstCard = elements.grid.firstChild;
+                if (firstCard) firstCard.focus();
+            }, 200);
+        }
+
+        function loadSettings() {
+            if (!localStorage.getItem('torrserve_url')) {
+                localStorage.setItem('torrserve_url', 'http://127.0.0.1:8090');
+            }
+        }
+
+        function saveSettings() {
+            localStorage.setItem('torrserve_url', document.getElementById('tsUrlInput').value);
+            localStorage.setItem('use_jacred', document.getElementById('useJacRedInput').checked);
+            localStorage.setItem('jacred_url', document.getElementById('jacredUrlInput').value);
+            closeAllModals();
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        async function playWithTorrServe(movie) {
+            const btn = document.getElementById('playBtn');
+            const useJacRed = localStorage.getItem('use_jacred') === 'true';
+            btn.innerHTML = `<span class="spinner"></span> ⏳ ${useJacRed ? 'Ищем на JacRed...' : 'Поиск торрентов...'}`;
+            btn.disabled = true;
+
+            const jacredUrl = (localStorage.getItem('jacred_url') || 'https://ru.jacred.pro').replace(/\/$/, '');
+            const query = movie.original_title || movie.title;
+
+            let allTorrents = [];
+
+            try {
+                // 1. Try JacRed if enabled
+                if (useJacRed) {
+                    try {
+                        const res = await fetch(`${jacredUrl}/api/v1.0/search?title=${encodeURIComponent(query)}&source=all`);
+                        const data = await res.json();
+                        if (Array.isArray(data)) {
+                            allTorrents = data.map(r => ({
+                                title: r.title ? r.title.replace(/<[^>]*>?/gm, '') : 'Unknown', // Clean HTML tags
+                                size: r.size || 0,
+                                seeds: r.seeders || 0,
+                                tracker: r.tracker || 'JacRed',
+                                quality: r.quality || 'Unknown',
+                                magnet: r.magnet || r.link
+                            }));
+                        }
+                    } catch (je) {
+                        console.error('JacRed search failed', je);
+                    }
+                }
+
+                // 2. Try Public API (apibay) as fallback
+                if (allTorrents.length === 0) {
+                    try {
+                        const res = await fetch(`https://apibay.org/q.php?q=${encodeURIComponent(query)}`);
+                        const data = await res.json();
+
+                        if (data && data.length > 0 && data[0].info_hash && data[0].info_hash !== '0000000000000000000000000000000000000000') {
+                            data.forEach(r => {
+                                allTorrents.push({
+                                    title: r.name,
+                                    size: parseInt(r.size),
+                                    seeds: parseInt(r.seeders) || 0,
+                                    tracker: 'ThePirateBay',
+                                    magnet: `magnet:?xt=urn:btih:${r.info_hash}&dn=${encodeURIComponent(r.name)}`
+                                });
+                            });
+                        }
+                    } catch (pe) {
+                        console.error('APIBay search failed', pe);
+                    }
+                }
+
+                if (allTorrents.length > 0) {
+                    // Sort by seeds descending
+                    allTorrents.sort((a, b) => b.seeds - a.seeds);
+                    renderTorrentList(allTorrents, movie);
+                } else {
+                    alert('Торрент не найден!');
+                }
+            } catch (e) {
+                console.error('Error during torrent search', e);
+                alert('Ошибка поиска торрента');
+            } finally {
+                // Restore button state
+                btn.innerHTML = '▶ Смотреть через TorrServe';
+                btn.disabled = false;
+            }
+        }
+
+        function renderTorrentList(torrents, movie) {
+            elements.torrentsList.innerHTML = '';
+
+            torrents.forEach(t => {
+                const item = document.createElement('div');
+                item.className = 'torrent-item';
+                item.tabIndex = 0;
+
+                const sizeGB = t.size ? (t.size / (1024 * 1024 * 1024)).toFixed(2) : '0';
+                const qualityTag = t.quality && t.quality !== 'Unknown' ? `<span style="background: #e50914; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; margin-left: 10px;">${t.quality}</span>` : '';
+
+                item.innerHTML = `
+                    <div class="torrent-info">
+                        <div class="torrent-title">${t.title} ${qualityTag}</div>
+                        <div class="torrent-meta">
+                            <span class="torrent-seeds">🌱 ${t.seeds} сид.</span>
+                            <span>📦 ${sizeGB} GB</span>
+                            <span class="torrent-tracker">🏷️ ${t.tracker}</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 20px; color: var(--primary-color);">▶</div>
+                `;
+
+                item.onclick = () => {
+                    sendMagnetToTorrServe(t.magnet, movie.title, `${IMG_URL}${movie.poster_path}`);
+                };
+
+                item.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') item.click();
+                });
+
+                elements.torrentsList.appendChild(item);
+            });
+
+            elements.movieModal.style.display = 'none';
+            elements.settingsModal.style.display = 'none';
+            elements.torrentsModal.style.display = 'block';
+
+            setTimeout(() => {
+                if (elements.torrentsList.firstChild) {
+                    elements.torrentsList.firstChild.focus();
+                }
+            }, 100);
+        }
+
+        async function sendMagnetToTorrServe(magnet, title, poster) {
+            const tsUrl = localStorage.getItem('torrserve_url');
+            const isAndroid = /android/i.test(navigator.userAgent);
+
+            try {
+                const response = await fetch(`${tsUrl}/torrents`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'add',
+                        link: magnet,
+                        title: title,
+                        poster: poster,
+                        save_to_db: true,
+                        play: true
+                    })
+                });
+
+                if (!response.ok) throw new Error('Bad response');
+                alert("Успешно отправлено в TorrServe!");
+            } catch (e) {
+                // Fallback for intent or desktop magnet link
+                const link = isAndroid ? `intent:${magnet}#Intent;package=ru.yourok.torrserve;end` : magnet;
+                window.location.href = link;
+            }
+        }
+
+        function setupEventListeners() {
+            let searchTimeout;
+            elements.search.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    const val = e.target.value.trim();
+                    elements.grid.innerHTML = '';
+                    currentPage = 1;
+                    hasMorePages = true;
+
+                    if (val) {
+                        currentEndpoint = '/search/movie';
+                        currentQuery = `&query=${encodeURIComponent(val)}`;
+                        document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                        elements.sectionTitle.textContent = `Результаты поиска: ${val}`;
+                    } else {
+                        currentEndpoint = '/movie/popular';
+                        currentQuery = '';
+                        if (elements.categories.firstChild) elements.categories.firstChild.classList.add('active');
+                        elements.sectionTitle.textContent = 'Популярные фильмы';
+                    }
+                    loadMovies();
+                }, 500);
+            });
+
+            window.addEventListener('scroll', () => {
+                if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+                    loadMovies();
+                }
+            });
+
+            document.getElementById('modalClose').addEventListener('click', closeAllModals);
+            elements.modalOverlay.addEventListener('click', (e) => {
+                if (e.target === elements.modalOverlay) closeAllModals();
+            });
+
+            document.getElementById('settingsBtn').addEventListener('click', openSettings);
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+            // Grid item keydown for enter
+            elements.grid.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    if (document.activeElement.classList.contains('movie-card')) {
+                        document.activeElement.click();
+                    }
+                }
+            });
+
+            // Keyboard navigation
+            document.addEventListener('keydown', (e) => {
+                const isInput = document.activeElement.tagName === 'INPUT';
+
+                if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+                    if (isInput && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+                    findNextFocus(e.key.replace('Arrow', ''));
+                    e.preventDefault();
+                } else if (e.key === 'Escape' || e.key === 'Backspace') {
+                    if (isInput && e.key === 'Backspace' && document.activeElement.value !== '') return;
+                    if (elements.modalOverlay.classList.contains('active')) {
+                        closeAllModals();
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+
+        function getFocusableElements() {
+            return Array.from(document.querySelectorAll('[tabindex="0"], a, button, input'))
+                .filter(el => {
+                    if (el.offsetParent === null) return false; // Not visible
+                    if (elements.modalOverlay.classList.contains('active')) {
+                        // Return only elements within modal
+                        if (elements.movieModal.style.display === 'block') return elements.movieModal.contains(el) || el.id === 'modalClose';
+                        if (elements.settingsModal.style.display === 'block') return elements.settingsModal.contains(el) || el.id === 'modalClose';
+                        if (elements.torrentsModal.style.display === 'block') return elements.torrentsModal.contains(el) || el.id === 'modalClose';
+                    } else {
+                        // Return only elements outside modal
+                        return !elements.modalOverlay.contains(el);
+                    }
+                    return true;
+                });
+        }
+
+        function findNextFocus(direction) {
+            const current = document.activeElement;
+            const focusable = getFocusableElements();
+
+            if (!focusable.includes(current)) {
+                if (focusable.length) focusable[0].focus();
+                return;
+            }
+
+            const currentRect = current.getBoundingClientRect();
+            let bestMatch = null;
+            let minDistance = Infinity;
+
+            focusable.forEach(el => {
+                if (el === current) return;
+                const rect = el.getBoundingClientRect();
+
+                let isValidDirection = false;
+
+                if (direction === 'Right' && rect.left >= currentRect.right - 20) isValidDirection = true;
+                if (direction === 'Left' && rect.right <= currentRect.left + 20) isValidDirection = true;
+                if (direction === 'Down' && rect.top >= currentRect.bottom - 20) isValidDirection = true;
+                if (direction === 'Up' && rect.bottom <= currentRect.top + 20) isValidDirection = true;
+
+                if (isValidDirection) {
+                    const dx = (rect.left + rect.width / 2) - (currentRect.left + currentRect.width / 2);
+                    const dy = (rect.top + rect.height / 2) - (currentRect.top + currentRect.height / 2);
+                    let dist = Infinity;
+
+                    if (direction === 'Left' || direction === 'Right') {
+                        dist = Math.abs(dx) + Math.abs(dy) * 5;
+                    } else {
+                        dist = Math.abs(dy) + Math.abs(dx) * 5;
+                    }
+
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        bestMatch = el;
+                    }
+                }
+            });
+
+            // Fallback if strict direction matching fails and it's up/down (often rows aren't perfectly aligned)
+            if (!bestMatch && (direction === 'Up' || direction === 'Down')) {
+                focusable.forEach(el => {
+                    if (el === current) return;
+                    const rect = el.getBoundingClientRect();
+                    let isFallback = false;
+                    if (direction === 'Down' && rect.top >= currentRect.bottom - 5) isFallback = true;
+                    if (direction === 'Up' && rect.bottom <= currentRect.top + 5) isFallback = true;
+                    if (isFallback) {
+                        const dx = (rect.left + rect.width / 2) - (currentRect.left + currentRect.width / 2);
+                        const dy = (rect.top + rect.height / 2) - (currentRect.top + currentRect.height / 2);
+                        const dist = Math.abs(dy) + Math.abs(dx) * 2;
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            bestMatch = el;
+                        }
+                    }
+                });
+            }
+
+            if (bestMatch) {
+                bestMatch.focus();
+                const rect = bestMatch.getBoundingClientRect();
+                if (rect.bottom > window.innerHeight || rect.top < document.querySelector('header').offsetHeight) {
+                    bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+
+        // Start app
+        init();
+    </script>
+
+</body>
+
+</html>
