@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ilovefilms</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Подключаем современные шрифты -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Иконки (можно заменить на SVG позже) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Верхнее меню навигации (Apple TV Style) -->
+        <header class="top-nav">
+            <div class="nav-content">
+                <div class="logo">
+                    <i class="fa-solid fa-film logo-icon"></i>
+                    <span>ilovefilms</span>
+                </div>
+                <ul class="nav-links">
+                    <li class="nav-item active" tabindex="0">Главная</li>
+                    <li class="nav-item" tabindex="0">Фильмы</li>
+                    <li class="nav-item" tabindex="0">Сериалы</li>
+                </ul>
+                <div class="nav-actions">
+                    <button class="nav-btn" tabindex="0" aria-label="Поиск" id="btn-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                    <button class="nav-btn" tabindex="0" aria-label="Настройки" id="btn-settings">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            
+            <!-- Главный баннер (Hero) -->
+            <section class="hero" id="hero-section">
+                <div class="hero-backdrop-container">
+                    <div id="hero-backdrop" class="hero-backdrop"></div>
+                    <div class="hero-gradient-left"></div>
+                    <div class="hero-gradient-bottom"></div>
+                </div>
+                <div class="hero-content">
+                    <div class="hero-meta-top">
+                        <span id="hero-badge" class="badge hidden">Новинка</span>
+                        <span id="hero-quality" class="quality" style="opacity:0">4K</span>
+                    </div>
+                    <h1 id="hero-title" class="hero-title">Загрузка...</h1>
+                    <p id="hero-overview" class="hero-overview">Пожалуйста, подождите.</p>
+                    <div class="hero-buttons">
+                        <button class="btn btn-primary" tabindex="0" id="btn-watch-hero">
+                            <i class="fa-solid fa-play"></i> Смотреть
+                        </button>
+                        <button class="btn btn-glass" tabindex="0" id="btn-details-hero">
+                            Подробнее
+                        </button>
+                        <button class="btn-icon" tabindex="0" aria-label="Добавить в список" id="btn-add-list-hero">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Карусели с контентом -->
+            <section class="carousel-section" id="popular-section">
+                <h2 class="carousel-title">Популярное</h2>
+                <div class="carousel-container" id="popular-movies">
+                    <!-- Карточки будут добавлены через JS -->
+                </div>
+            </section>
+
+            <section class="carousel-section" id="top-rated-section">
+                <h2 class="carousel-title">Топ рейтинга</h2>
+                <div class="carousel-container" id="top-rated-movies">
+                    <!-- Карточки будут добавлены через JS -->
+                </div>
+            </section>
+        </main>
+        
+        <!-- Страница Фильма/Сериала (SPA Overlay) -->
+        <section id="details-page" class="details-page hidden">
+            <div class="details-backdrop-container">
+                <div id="details-backdrop" class="details-backdrop"></div>
+                <div class="details-gradient"></div>
+            </div>
+            
+            <div class="details-content">
+                <button id="btn-back" class="btn btn-icon btn-back" tabindex="0" aria-label="Назад">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                
+                <div class="details-layout">
+                    <div class="details-left">
+                        <div class="details-poster-wrapper">
+                            <img id="details-poster" class="details-poster" src="" alt="Poster">
+                        </div>
+                        <div class="details-actions">
+                            <button class="btn btn-primary" tabindex="0" id="btn-watch">
+                                <i class="fa-solid fa-play"></i> Смотреть
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="details-info">
+                        <h1 id="details-title" class="details-title">Загрузка...</h1>
+                        
+                        <div class="details-list" id="details-meta">
+                            <div class="list-item"><span class="label">Оригинальное название:</span> <span class="value" id="details-original-title"></span></div>
+                            <div class="list-item"><span class="label">Релиз:</span> <span class="value" id="details-year">----</span></div>
+                            <div class="list-item"><span class="label">Жанр:</span> <span class="value" id="details-genres"></span></div>
+                            <div class="list-item"><span class="label">Оценка:</span> <span class="value" id="details-rating">0.0</span></div>
+                            <div class="list-item"><span class="label">Время:</span> <span class="value" id="details-runtime">-- мин</span></div>
+                            <div class="list-item"><span class="label">В ролях:</span> <span class="value" id="details-cast"></span></div>
+                        </div>
+                        
+                        <div class="details-overview-container">
+                            <h3 class="overview-heading">Описание</h3>
+                            <p id="details-overview" class="details-overview-text">Ожидание данных...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="details-similar">
+                    <h2 class="carousel-title">Похожие</h2>
+                    <div class="carousel-container" id="similar-movies">
+                        <!-- Похожие фильмы -->
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Модальное окно настроек (Apple TV Style) -->
+    <div id="settings-modal" class="settings-modal hidden">
+        <div class="settings-content">
+             <h2 class="settings-title">Настройки</h2>
+             
+             <div class="settings-group">
+                 <h3 class="settings-subtitle">Качество изображений</h3>
+                 <p class="settings-desc">Выберите качество картинок. Низкое ускоряет загрузку на слабом интернете.</p>
+                 
+                 <div class="settings-options" id="quality-options">
+                     <button class="settings-btn" data-quality="high" tabindex="0">
+                         <span class="btn-text">Высокое (HD)</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                     <button class="settings-btn" data-quality="medium" tabindex="0">
+                         <span class="btn-text">Среднее</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                     <button class="settings-btn" data-quality="low" tabindex="0">
+                         <span class="btn-text">Низкое (Экономия данных)</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                 </div>
+             </div>
+
+             <div class="settings-group">
+                 <h3 class="settings-subtitle">TorrServer</h3>
+                 <p class="settings-desc">Укажите адрес вашего TorrServer для потокового воспроизведения торрентов.</p>
+                 <div class="settings-input-row">
+                     <input type="text" id="input-torrserver" class="settings-input" placeholder="http://127.0.0.1:8090" tabindex="0">
+                 </div>
+             </div>
+
+             <div class="settings-group">
+                 <h3 class="settings-subtitle">Парсер раздач (Jackett)</h3>
+                 <p class="settings-desc">Выберите основной парсер. Если он не ответит, приложение попробует остальные автоматически.</p>
+                 <div class="settings-options" id="parser-options">
+                     <button class="settings-btn" data-parser="https://jac.red" tabindex="0">
+                         <span class="btn-text">jac.red</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                     <button class="settings-btn" data-parser="https://ru.jacred.pro" tabindex="0">
+                         <span class="btn-text">ru.jacred.pro</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                     <button class="settings-btn" data-parser="https://jr.maxvol.pro" tabindex="0">
+                         <span class="btn-text">jr.maxvol.pro</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                 </div>
+             </div>
+
+             <div class="settings-actions">
+                 <button class="btn btn-glass" id="btn-close-settings" tabindex="0">Закрыть</button>
+             </div>
+        </div>
+    </div>
+
+    <!-- Оверлей списка торрентов -->
+    <div id="torrent-modal" class="torrent-modal hidden">
+        <div class="torrent-content">
+            <div class="torrent-header">
+                <h2 class="torrent-title" id="torrent-modal-title">Поиск раздач...</h2>
+                <button class="btn btn-icon" id="btn-close-torrents" tabindex="0" aria-label="Закрыть">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="torrent-status" id="torrent-status">
+                <i class="fa-solid fa-spinner fa-spin"></i> Ищем раздачи...
+            </div>
+            <div class="torrent-list" id="torrent-list">
+                <!-- Раздачи будут сюда -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Встроенный видеоплеер -->
+    <div id="player-modal" class="player-modal hidden">
+        <div class="player-header">
+            <button class="btn btn-icon" id="btn-close-player" tabindex="0" aria-label="Закрыть">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <span id="player-title" class="player-title-text"></span>
+            <div class="player-actions">
+                <button class="btn btn-player-action" id="btn-player-external" tabindex="0" title="Открыть во внешнем плеере (VLC и др.)">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                    <span>Внешний плеер</span>
+                </button>
+                <button class="btn btn-player-action" id="btn-player-copy" tabindex="0" title="Скопировать ссылку для вставки в плеер">
+                    <i class="fa-solid fa-copy"></i>
+                    <span>Копировать ссылку</span>
+                </button>
+            </div>
+        </div>
+        <div class="player-loading" id="player-loading">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <span>Подключение к TorrServer...</span>
+        </div>
+        <!-- Основной видео-плеер (MP4/WebM) -->
+        <video id="video-player" class="video-player" controls autoplay>
+            Ваш браузер не поддерживает видео.
+        </video>
+        <!-- Iframe-плеер для прямой ссылки TorrServer -->
+        <iframe id="iframe-player" class="iframe-player hidden" allowfullscreen></iframe>
+    </div>
+
+    <!-- Подключаем основной скрипт приложения -->
+    <script src="app.js"></script>
+</body>
+</html>
