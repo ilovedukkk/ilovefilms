@@ -150,9 +150,27 @@
                             <div class="list-item"><span class="label">Оригинальное название:</span> <span class="value" id="details-original-title"></span></div>
                             <div class="list-item"><span class="label">Год:</span> <span class="value" id="details-year">----</span></div>
                             <div class="list-item"><span class="label">Жанр:</span> <span class="value" id="details-genres"></span></div>
-                            <div class="list-item"><span class="label">Оценка:</span> <span class="value" id="details-rating">0.0</span></div>
+                            <div class="list-item"><span class="label">TMDB:</span> <span class="value" id="details-rating">0.0</span></div>
+                            <div class="list-item"><span class="label">Кинопоиск:</span> <span class="value" id="details-kp-rating">--</span></div>
+                            <div class="list-item"><span class="label">Моя оценка:</span> <span class="value details-user-rating" id="details-user-rating">Не оценено</span></div>
                             <div class="list-item"><span class="label">Время:</span> <span class="value" id="details-runtime">-- мин</span></div>
                             <div class="list-item"><span class="label">В ролях:</span> <span class="value" id="details-cast"></span></div>
+                        </div>
+                        <div class="user-rating-panel">
+                            <span class="user-rating-label">Оцените тайтл</span>
+                            <div class="user-rating-actions" id="details-user-rating-actions">
+                                <button class="btn btn-glass btn-user-rating" data-rating="1" tabindex="0">1</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="2" tabindex="0">2</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="3" tabindex="0">3</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="4" tabindex="0">4</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="5" tabindex="0">5</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="6" tabindex="0">6</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="7" tabindex="0">7</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="8" tabindex="0">8</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="9" tabindex="0">9</button>
+                                <button class="btn btn-glass btn-user-rating" data-rating="10" tabindex="0">10</button>
+                                <button class="btn btn-glass btn-user-rating btn-user-rating-clear" id="btn-user-rating-clear" tabindex="0">Сбросить</button>
+                            </div>
                         </div>
                         
                         <div class="details-overview-container">
@@ -202,6 +220,30 @@
                  <p class="settings-desc">Укажите адрес вашего TorrServer для потокового воспроизведения торрентов.</p>
                  <div class="settings-input-row">
                      <input type="text" id="input-torrserver" class="settings-input" placeholder="http://127.0.0.1:8090" tabindex="0">
+                 </div>
+             </div>
+
+             <div class="settings-group">
+                 <h3 class="settings-subtitle">Плеер</h3>
+                 <p class="settings-desc">Выберите, где открывать поток: во встроенном плеере сайта или на отдельной странице, оптимизированной под Media Station X.</p>
+
+                 <div class="settings-options" id="player-target-options">
+                     <button class="settings-btn" data-player-target="internal" tabindex="0">
+                         <span class="btn-text">Встроенный плеер</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                     <button class="settings-btn" data-player-target="msx" tabindex="0">
+                         <span class="btn-text">Media Station X</span>
+                         <i class="fa-solid fa-check checkmark"></i>
+                     </button>
+                 </div>
+             </div>
+
+             <div class="settings-group">
+                 <h3 class="settings-subtitle">Кинопоиск</h3>
+                 <p class="settings-desc">Укажите API key от Kinopoisk API Unofficial, если хотите подтягивать рейтинг Кинопоиска рядом с TMDB.</p>
+                 <div class="settings-input-row">
+                     <input type="text" id="input-kinopoisk-key" class="settings-input" placeholder="X-API-KEY" tabindex="0">
                  </div>
              </div>
 
@@ -360,6 +402,10 @@
                 <button class="btn btn-player-action" id="btn-player-external" tabindex="0" title="Открыть во внешнем плеере (VLC и др.)">
                     <i class="fa-solid fa-up-right-from-square"></i>
                     <span>Внешний плеер</span>
+                </button>
+                <button class="btn btn-player-action" id="btn-player-msx" tabindex="0" title="Открыть поток на отдельной странице Media Station X">
+                    <i class="fa-solid fa-tv"></i>
+                    <span>Media Station X</span>
                 </button>
                 <button class="btn btn-player-action" id="btn-player-copy" tabindex="0" title="Скопировать ссылку для вставки в плеер">
                     <i class="fa-solid fa-copy"></i>

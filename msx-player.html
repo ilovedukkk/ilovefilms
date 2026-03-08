@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSX Player</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #05070b;
+            --panel: rgba(10, 14, 20, 0.88);
+            --panel-strong: rgba(20, 25, 34, 0.94);
+            --line: rgba(255, 255, 255, 0.12);
+            --text: #f3f5f7;
+            --muted: rgba(243, 245, 247, 0.68);
+            --accent: #ff5d47;
+            --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top, rgba(255, 93, 71, 0.16), transparent 30%),
+                linear-gradient(180deg, #0d1118 0%, #05070b 100%);
+            color: var(--text);
+            font-family: "Segoe UI", sans-serif;
+        }
+
+        .shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 16px;
+            padding: 18px;
+        }
+
+        .topbar,
+        .controls,
+        .status {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+        }
+
+        .back-btn,
+        .control-btn {
+            border: 1px solid var(--line);
+            background: var(--panel-strong);
+            color: var(--text);
+            border-radius: 12px;
+            min-height: 48px;
+            padding: 0 16px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .back-btn:focus,
+        .control-btn:focus,
+        .back-btn:hover,
+        .control-btn:hover {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.24);
+        }
+
+        .title-wrap {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .eyebrow {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .title {
+            margin-top: 4px;
+            font-size: 20px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .player {
+            position: relative;
+            border-radius: 24px;
+            overflow: hidden;
+            background: #000;
+            border: 1px solid var(--line);
+            min-height: 320px;
+        }
+
+        video,
+        iframe {
+            width: 100%;
+            height: 100%;
+            min-height: 56vh;
+            border: 0;
+            background: #000;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            text-align: center;
+            background: linear-gradient(180deg, rgba(5, 7, 11, 0.18), rgba(5, 7, 11, 0.82));
+        }
+
+        .overlay-card {
+            max-width: 720px;
+            background: rgba(8, 11, 16, 0.82);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 20px;
+        }
+
+        .overlay-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .overlay-text {
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 16px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            min-height: 34px;
+            padding: 0 12px;
+            background: rgba(255, 93, 71, 0.18);
+            color: #ffd0ca;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .status-text {
+            flex: 1;
+            min-width: 0;
+            color: var(--muted);
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .control-btn.primary {
+            background: rgba(255, 93, 71, 0.16);
+            border-color: rgba(255, 93, 71, 0.24);
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+            padding-bottom: 6px;
+        }
+
+        @media (max-width: 720px) {
+            .shell {
+                padding: 12px;
+            }
+
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .status {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <button class="back-btn" id="btn-back" type="button">Назад</button>
+            <div class="title-wrap">
+                <div class="eyebrow">Media Station X</div>
+                <div class="title" id="screen-title">Подготовка потока...</div>
+            </div>
+        </header>
+
+        <main class="player">
+            <video id="video" controls autoplay playsinline></video>
+            <iframe id="iframe" class="hidden" allowfullscreen></iframe>
+            <div class="overlay" id="overlay">
+                <div class="overlay-card">
+                    <div class="overlay-title" id="overlay-title">Подключение к потоку</div>
+                    <div class="overlay-text" id="overlay-text">Плеер готовит воспроизведение через TorrServer.</div>
+                </div>
+            </div>
+        </main>
+
+        <section class="status">
+            <div class="status-badge" id="status-badge">Подключение</div>
+            <div class="status-text" id="status-text">Открываем поток...</div>
+        </section>
+
+        <section class="controls">
+            <button class="control-btn primary" id="btn-toggle" type="button">Пауза / Play</button>
+            <button class="control-btn" id="btn-reload" type="button">Перезапустить</button>
+            <button class="control-btn" id="btn-open-source" type="button">Открыть ссылку</button>
+        </section>
+
+        <div class="hint">Пульт: OK или Space - play/pause, Left/Right - 10 сек, Up/Down - громкость, Back/Escape - назад</div>
+    </div>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const params = new URLSearchParams(window.location.search);
+            const streamUrl = params.get('src') || '';
+            const title = params.get('title') || 'Воспроизведение';
+            const returnUrl = params.get('return') || 'index.html';
+
+            const video = document.getElementById('video');
+            const iframe = document.getElementById('iframe');
+            const overlay = document.getElementById('overlay');
+            const screenTitle = document.getElementById('screen-title');
+            const overlayTitle = document.getElementById('overlay-title');
+            const overlayText = document.getElementById('overlay-text');
+            const statusBadge = document.getElementById('status-badge');
+            const statusText = document.getElementById('status-text');
+            const btnBack = document.getElementById('btn-back');
+            const btnToggle = document.getElementById('btn-toggle');
+            const btnReload = document.getElementById('btn-reload');
+            const btnOpenSource = document.getElementById('btn-open-source');
+
+            let iframeMode = false;
+
+            screenTitle.textContent = title;
+
+            function setStatus(badge, text) {
+                statusBadge.textContent = badge;
+                statusText.textContent = text;
+            }
+
+            function showOverlay(nextTitle, nextText) {
+                overlay.classList.remove('hidden');
+                overlayTitle.textContent = nextTitle;
+                overlayText.textContent = nextText;
+            }
+
+            function hideOverlay() {
+                overlay.classList.add('hidden');
+            }
+
+            function goBack() {
+                if (window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+
+                window.location.assign(returnUrl);
+            }
+
+            function seek(delta) {
+                if (iframeMode || !Number.isFinite(video.duration)) return;
+                video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta));
+                setStatus('Перемотка', (delta > 0 ? '+' : '') + delta + ' сек');
+            }
+
+            function adjustVolume(delta) {
+                if (iframeMode) return;
+                video.muted = false;
+                video.volume = Math.max(0, Math.min(1, video.volume + delta));
+                setStatus('Громкость', 'Громкость ' + Math.round(video.volume * 100) + '%');
+            }
+
+            function togglePlayback() {
+                if (iframeMode) {
+                    setStatus('Iframe', 'Управление воспроизведением доступно на странице TorrServer');
+                    return;
+                }
+
+                if (video.paused) {
+                    video.play().catch(function () {
+                        setStatus('Ожидание', 'Нажмите Play в плеере');
+                    });
+                    return;
+                }
+
+                video.pause();
+            }
+
+            function switchToIframe() {
+                if (iframeMode || !streamUrl) return;
+
+                iframeMode = true;
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+                video.classList.add('hidden');
+                iframe.classList.remove('hidden');
+                iframe.src = streamUrl;
+                showOverlay('Открываем fallback-плеер', 'HTML5-режим не подошёл, переключаемся на встроенную страницу TorrServer.');
+                setStatus('Fallback', 'Включён iframe-режим TorrServer');
+
+                iframe.onload = function () {
+                    hideOverlay();
+                    setStatus('Iframe', 'Поток открыт через встроенную страницу TorrServer');
+                };
+            }
+
+            function startPlayback() {
+                if (!streamUrl) {
+                    showOverlay('Ссылка не найдена', 'Откройте поток из каталога заново: для запуска MSX нужен параметр src.');
+                    setStatus('Ошибка', 'Нет ссылки потока');
+                    video.classList.add('hidden');
+                    return;
+                }
+
+                iframeMode = false;
+                iframe.classList.add('hidden');
+                iframe.src = '';
+                video.classList.remove('hidden');
+                video.src = streamUrl;
+                showOverlay('Подключение к потоку', 'Плеер готовит воспроизведение через TorrServer.');
+                setStatus('Подключение', 'Открываем поток...');
+
+                video.play().catch(function () {
+                    setStatus('Ожидание', 'Нажмите Play или OK для запуска');
+                    showOverlay('Требуется запуск', 'Автозапуск был заблокирован. Нажмите OK, Enter или кнопку Play.');
+                });
+            }
+
+            video.addEventListener('playing', function () {
+                hideOverlay();
+                setStatus('Воспроизведение', 'Поток запущен');
+            });
+
+            video.addEventListener('pause', function () {
+                if (!iframeMode) {
+                    setStatus('Пауза', 'Воспроизведение остановлено');
+                }
+            });
+
+            video.addEventListener('waiting', function () {
+                if (!iframeMode) {
+                    setStatus('Буферизация', 'Подгружаем данные потока...');
+                }
+            });
+
+            video.addEventListener('loadedmetadata', function () {
+                if (!iframeMode) {
+                    hideOverlay();
+                    setStatus('Готово', 'Метаданные потока загружены');
+                }
+            });
+
+            video.addEventListener('ended', function () {
+                setStatus('Завершено', 'Воспроизведение завершено');
+            });
+
+            video.addEventListener('error', function () {
+                switchToIframe();
+            });
+
+            btnBack.addEventListener('click', goBack);
+            btnToggle.addEventListener('click', togglePlayback);
+            btnReload.addEventListener('click', startPlayback);
+            btnOpenSource.addEventListener('click', function () {
+                if (streamUrl) {
+                    window.open(streamUrl, '_blank');
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' || event.key === 'Backspace') {
+                    event.preventDefault();
+                    goBack();
+                    return;
+                }
+
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    togglePlayback();
+                    return;
+                }
+
+                if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    seek(-10);
+                    return;
+                }
+
+                if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    seek(10);
+                    return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    adjustVolume(0.05);
+                    return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    adjustVolume(-0.05);
+                    return;
+                }
+
+                if (event.key.toLowerCase() === 'r') {
+                    event.preventDefault();
+                    startPlayback();
+                }
+            });
+
+            startPlayback();
+        }());
+    </script>
+</body>
+</html>

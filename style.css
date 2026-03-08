@@ -699,6 +699,40 @@ body::-webkit-scrollbar-thumb,
     max-width: 760px;
 }
 
+.user-rating-panel {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.user-rating-label {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.user-rating-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.btn-user-rating {
+    min-height: 42px;
+    min-width: 42px;
+    padding: 0 14px;
+}
+
+.btn-user-rating-clear {
+    min-width: 120px;
+}
+
+.details-user-rating {
+    color: var(--accent-red);
+}
+
 .overview-heading {
     margin-bottom: 10px;
     font-family: var(--font-heading);

@@ -5,6 +5,7 @@ const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 const APP_SETTINGS_KEY = 'appSettings';
 const WATCHLIST_STORAGE_KEY = 'watchlistItems';
 const HISTORY_STORAGE_KEY = 'viewHistoryItems';
+const USER_RATINGS_STORAGE_KEY = 'userRatings';
 
 // Р‘Р°Р·РѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹: РєР»СЋС‡ API Рё СЂСѓСЃСЃРєРёР№ СЏР·С‹Рє
 const DEFAULT_PARAMS = `?api_key=${API_KEY}&language=ru-RU`;
@@ -40,11 +41,15 @@ function initDomElements() {
         detailsTitle: document.getElementById('details-title'),
         detailsOriginalTitle: document.getElementById('details-original-title'),
         detailsRating: document.getElementById('details-rating'),
+        detailsKpRating: document.getElementById('details-kp-rating'),
         detailsYear: document.getElementById('details-year'),
         detailsRuntime: document.getElementById('details-runtime'),
         detailsGenres: document.getElementById('details-genres'),
         detailsOverview: document.getElementById('details-overview'),
         detailsCast: document.getElementById('details-cast'),
+        detailsUserRating: document.getElementById('details-user-rating'),
+        detailsUserRatingActions: document.getElementById('details-user-rating-actions'),
+        btnUserRatingClear: document.getElementById('btn-user-rating-clear'),
         detailsActions: document.querySelector('.details-actions'),
         btnWatch: document.getElementById('btn-watch'),
         btnWatchlist: document.getElementById('btn-watchlist'),
@@ -57,6 +62,7 @@ function initDomElements() {
         jackettQueryInput: document.getElementById('input-jackett-query'),
         btnJackettTest: document.getElementById('btn-jackett-test'),
         btnJackettOpenSearch: document.getElementById('btn-jackett-open-search'),
+        inputKinopoiskKey: document.getElementById('input-kinopoisk-key'),
         torrentFilterQuery: document.getElementById('torrent-filter-query'),
         torrentFilterQuality: document.getElementById('torrent-filter-quality'),
         torrentFilterSeeders: document.getElementById('torrent-filter-seeders'),
@@ -84,10 +90,14 @@ function loadAppSettings() {
         saved = {};
     }
 
+    const hasPlayerTarget = Object.prototype.hasOwnProperty.call(saved, 'playerTarget');
+
     return {
         imageQuality: saved.imageQuality || localStorage.getItem('imageQuality') || 'high',
         torrServerHost: saved.torrServerHost || localStorage.getItem('torrServerHost') || 'http://127.0.0.1:8090',
         preferredParser: saved.preferredParser || localStorage.getItem('preferredParser') || 'https://jac.red',
+        kinopoiskApiKey: saved.kinopoiskApiKey || '',
+        playerTarget: hasPlayerTarget ? saved.playerTarget : (isProbablyMediaStationXEnvironment() ? 'msx' : 'internal'),
         torrentFilterQuery: saved.torrentFilterQuery || '',
         torrentFilterQuality: saved.torrentFilterQuality || 'all',
         torrentFilterSeeders: saved.torrentFilterSeeders || '0',
@@ -117,6 +127,11 @@ const TV_FOCUSABLE_SELECTOR = [
     '[tabindex]:not([tabindex="-1"])'
 ].join(', ');
 
+function isProbablyMediaStationXEnvironment() {
+    const userAgent = navigator.userAgent || '';
+    return /Media Station X|MediaStationX/i.test(userAgent) || window.location.search.includes('platform=msx');
+}
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
         '&': '&amp;',
@@ -141,6 +156,40 @@ function persistUserSettings() {
     localStorage.setItem('imageQuality', userSettings.imageQuality);
     localStorage.setItem('torrServerHost', userSettings.torrServerHost);
     localStorage.setItem('preferredParser', userSettings.preferredParser);
+}
+
+function buildMsxPlayerUrl(streamUrl, title) {
+    const url = new URL('msx-player.html', window.location.href);
+    url.searchParams.set('src', streamUrl);
+    if (title) {
+        url.searchParams.set('title', title);
+    }
+    url.searchParams.set('return', window.location.href);
+    return url.toString();
+}
+
+function openMsxPlayer(streamUrl, title, sameTab = false) {
+    if (!streamUrl) return;
+
+    const url = buildMsxPlayerUrl(streamUrl, title);
+    if (sameTab) {
+        window.location.assign(url);
+        return;
+    }
+
+    window.open(url, '_blank');
+}
+
+function getUserRatings() {
+    try {
+        return JSON.parse(localStorage.getItem(USER_RATINGS_STORAGE_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+
+function saveUserRatings(ratings) {
+    localStorage.setItem(USER_RATINGS_STORAGE_KEY, JSON.stringify(ratings));
 }
 
 function isTextInputElement(element) {
@@ -353,6 +402,27 @@ function getMediaType(item) {
 
 function getFavoriteKey(item) {
     return `${getMediaType(item)}:${item.id}`;
+}
+
+function getUserRating(item) {
+    const ratings = getUserRatings();
+    return ratings[getFavoriteKey(item)] || null;
+}
+
+function setUserRating(item, rating) {
+    const ratings = getUserRatings();
+    const key = getFavoriteKey(item);
+
+    if (rating == null) {
+        delete ratings[key];
+    } else {
+        ratings[key] = {
+            rating,
+            updatedAt: Date.now()
+        };
+    }
+
+    saveUserRatings(ratings);
 }
 
 function getWatchlist() {
@@ -682,6 +752,8 @@ function renderHero(item) {
     const releaseDate = item.release_date || item.first_air_date || '';
     const year = releaseDate ? releaseDate.substring(0, 4) : 'Без даты';
     const rating = item.vote_average ? item.vote_average.toFixed(1) : 'NR';
+    const kpRating = item.kpRating ? Number(item.kpRating).toFixed(1) : null;
+    const userRating = getUserRating(item);
     const isTv = !!item.name && !item.title;
     const itemYear = parseInt(year, 10);
     const currentYear = new Date().getFullYear();
@@ -717,9 +789,11 @@ function renderHero(item) {
     }
 
     if (domElements.heroRating) {
-        domElements.heroRating.innerHTML = item.vote_average
-            ? `<i class="fa-solid fa-star"></i> ${rating} TMDB`
-            : 'TMDB NR';
+        const chunks = [];
+        chunks.push(item.vote_average ? `<i class="fa-solid fa-star"></i> ${rating} TMDB` : 'TMDB NR');
+        if (kpRating) chunks.push(`KP ${kpRating}`);
+        if (userRating && userRating.rating) chunks.push(`Моя ${userRating.rating}/10`);
+        domElements.heroRating.innerHTML = chunks.join(' · ');
     }
 
     updateHeroFavoriteButton();
@@ -736,6 +810,55 @@ function renderHeroPlaceholder(title, description) {
     domElements.heroYear.textContent = '--';
     domElements.heroRating.textContent = 'TMDB NR';
     updateHeroFavoriteButton();
+}
+
+function updateDetailsUserRatingUI(item) {
+    if (!domElements.detailsUserRatingActions || !domElements.detailsUserRating) return;
+
+    const rating = item ? getUserRating(item) : null;
+    domElements.detailsUserRating.textContent = rating ? `${rating.rating}/10` : 'Не оценено';
+
+    domElements.detailsUserRatingActions.querySelectorAll('.btn-user-rating').forEach((button) => {
+        const value = Number(button.dataset.rating);
+        button.classList.toggle('active', !!rating && value === rating.rating);
+    });
+}
+
+async function fetchKinopoiskRating(item) {
+    if (!userSettings.kinopoiskApiKey) return null;
+
+    const title = item.title || item.name || item.original_title || item.original_name;
+    if (!title) return null;
+
+    const year = Number((item.release_date || item.first_air_date || '').substring(0, 4)) || null;
+    const endpoint = `https://kinopoiskapiunofficial.tech/api/v2.1/films/search-by-keyword?keyword=${encodeURIComponent(title)}&page=1`;
+
+    try {
+        const response = await fetch(endpoint, {
+            headers: {
+                'X-API-KEY': userSettings.kinopoiskApiKey,
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const films = data.films || [];
+        if (!films.length) return null;
+
+        const normalizedTitle = title.toLowerCase();
+        const bestMatch = films.find((film) => {
+            const candidateYear = Number(String(film.year || '').substring(0, 4)) || null;
+            const candidateTitle = String(film.nameRu || film.nameEn || film.nameOriginal || '').toLowerCase();
+            const yearMatches = !year || !candidateYear || Math.abs(candidateYear - year) <= 1;
+            const titleMatches = candidateTitle.includes(normalizedTitle) || normalizedTitle.includes(candidateTitle);
+            return yearMatches && titleMatches;
+        }) || films[0];
+
+        return bestMatch.rating || bestMatch.ratingImdb || null;
+    } catch (error) {
+        console.warn('Не удалось получить рейтинг Кинопоиска:', error.message);
+        return null;
+    }
 }
 
 /**
@@ -848,6 +971,9 @@ function resetDetailsContent(item) {
     domElements.detailsGenres.textContent = 'Нет данных';
     domElements.detailsOverview.textContent = item.overview || 'Описание пока отсутствует.';
     domElements.detailsCast.textContent = 'Нет данных';
+    if (domElements.detailsKpRating) {
+        domElements.detailsKpRating.textContent = userSettings.kinopoiskApiKey ? 'Загрузка...' : 'Нужен API key';
+    }
     domElements.similarContainer.innerHTML = '';
     domElements.detailsPoster.alt = title;
     domElements.detailsPoster.src = item.poster_path
@@ -857,6 +983,7 @@ function resetDetailsContent(item) {
         ? `url('${IMAGE_BASE_URL}${backdropSize}${item.backdrop_path}')`
         : 'none';
     updateDetailsWatchlistButton(item);
+    updateDetailsUserRatingUI(item);
 }
 
 function renderExtensionButtons(item) {
@@ -937,6 +1064,32 @@ async function openDetailsPage(item) {
         });
     }
 
+    if (domElements.detailsUserRatingActions) {
+        domElements.detailsUserRatingActions.querySelectorAll('.btn-user-rating[data-rating]').forEach((button) => {
+            const newButton = button.cloneNode(true);
+            button.replaceWith(newButton);
+            newButton.addEventListener('click', () => {
+                setUserRating(item, Number(newButton.dataset.rating));
+                updateDetailsUserRatingUI(item);
+                renderHero(item);
+                showAppNotification('Ваша оценка сохранена');
+            });
+        });
+        const clearButton = document.getElementById('btn-user-rating-clear');
+        if (clearButton) {
+            const newClearButton = clearButton.cloneNode(true);
+            clearButton.replaceWith(newClearButton);
+            domElements.btnUserRatingClear = newClearButton;
+            newClearButton.addEventListener('click', () => {
+                setUserRating(item, null);
+                updateDetailsUserRatingUI(item);
+                renderHero(item);
+                showAppNotification('Ваша оценка удалена');
+            });
+        }
+        updateDetailsUserRatingUI(item);
+    }
+
     // РћРїСЂРµРґРµР»СЏРµРј С‚РёРї РєРѕРЅС‚РµРЅС‚Р°
     const type = getMediaType(item);
     
@@ -981,11 +1134,16 @@ async function openDetailsPage(item) {
             domElements.similarContainer.innerHTML = '<div class="carousel-empty">Похожие фильмы не найдены.</div>';
         }
 
-        addToViewHistory({ ...item, ...fullData, media_type: type });
-        
+        const kpRating = await fetchKinopoiskRating(fullData);
+        if (domElements.detailsKpRating) {
+            domElements.detailsKpRating.textContent = kpRating ? `${kpRating}` : (userSettings.kinopoiskApiKey ? 'Нет данных' : 'Нужен API key');
+        }
+        if (kpRating) {
+            renderHero({ ...fullData, kpRating, media_type: type });
+        }
+
     } catch (error) {
         console.error('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґРµС‚Р°Р»РµР№:', error);
-        addToViewHistory(item);
     }
 }
 
@@ -1304,8 +1462,19 @@ function setupSettings() {
     const settingsModal = document.getElementById('settings-modal');
     const btnCloseSettings = document.getElementById('btn-close-settings');
     const qualityBtns = document.querySelectorAll('#quality-options .settings-btn');
+    const playerTargetBtns = document.querySelectorAll('#player-target-options .settings-btn');
     
     if (!btnSettings || !settingsModal) return;
+
+    const syncPlayerTargetButtons = () => {
+        playerTargetBtns.forEach((btn) => {
+            if (btn.dataset.playerTarget === userSettings.playerTarget) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    };
 
     // РћС‚РєСЂС‹С‚СЊ РјРѕРґР°Р»РєСѓ
     const openSettings = () => {
@@ -1319,6 +1488,7 @@ function setupSettings() {
                 btn.classList.remove('active');
             }
         });
+        syncPlayerTargetButtons();
         const activeBtn = settingsModal.querySelector('.settings-btn.active');
         if (activeBtn) applyTvFocus(activeBtn, { scroll: false });
     };
@@ -1357,6 +1527,20 @@ function setupSettings() {
         btn.addEventListener('click', setQuality);
     });
 
+    playerTargetBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const nextTarget = btn.dataset.playerTarget || 'internal';
+            if (userSettings.playerTarget === nextTarget) return;
+
+            userSettings.playerTarget = nextTarget;
+            persistUserSettings();
+            syncPlayerTargetButtons();
+            showAppNotification(nextTarget === 'msx'
+                ? 'Потоки будут открываться в режиме Media Station X'
+                : 'Потоки будут открываться во встроенном плеере');
+        });
+    });
+
     // РћР±СЂР°Р±РѕС‚РєР° РєР»Р°РІРёС€ РІ РјРѕРґР°Р»РєРµ (Esc/Backspace)
     settingsModal.addEventListener('keydown', (e) => {
         // РРіРЅРѕСЂРёСЂСѓРµРј, РµСЃР»Рё С„РѕРєСѓСЃ РІ РёРЅРїСѓС‚Рµ РїСЂРё РЅР°Р¶Р°С‚РёРё Backspace
@@ -1382,6 +1566,15 @@ function setupSettings() {
             }
         });
     }
+
+    if (domElements.inputKinopoiskKey) {
+        domElements.inputKinopoiskKey.value = userSettings.kinopoiskApiKey;
+        domElements.inputKinopoiskKey.addEventListener('change', () => {
+            userSettings.kinopoiskApiKey = domElements.inputKinopoiskKey.value.trim();
+            persistUserSettings();
+        });
+    }
+
 }
 
 /**
@@ -1626,6 +1819,8 @@ function renderTorrentResults(results, container) {
 let currentStreamUrl = '';
 let currentMagnetUri = '';
 let currentPlayerTitle = '';
+let currentPlayerHistoryItem = null;
+let hasRecordedCurrentPlaybackHistory = false;
 let playerMode = 'html5';
 let playerChromeTimeout = null;
 
@@ -1639,6 +1834,12 @@ function clearPlayerChromeTimer() {
 function isPlayerLoadingVisible() {
     const { loading } = getPlayerElements();
     return !!loading && !loading.classList.contains('hidden');
+}
+
+function recordCurrentPlaybackHistory() {
+    if (hasRecordedCurrentPlaybackHistory || !currentPlayerHistoryItem) return;
+    addToViewHistory(currentPlayerHistoryItem);
+    hasRecordedCurrentPlaybackHistory = true;
 }
 
 function showPlayerChrome(scheduleHide = true) {
@@ -1690,6 +1891,7 @@ function getPlayerElements() {
         btnRestart: document.getElementById('btn-player-restart'),
         btnFullscreen: document.getElementById('btn-player-fullscreen'),
         btnExternal: document.getElementById('btn-player-external'),
+        btnMsx: document.getElementById('btn-player-msx'),
         btnCopy: document.getElementById('btn-player-copy'),
         btnClose: document.getElementById('btn-close-player')
     };
@@ -1819,6 +2021,7 @@ function bindPlayerVideoEvents() {
 
     video.onplaying = () => {
         if (loading) loading.classList.add('hidden');
+        recordCurrentPlaybackHistory();
         setPlayerStatus('Воспроизведение', 'Поток запущен');
         updatePlayerButtonsState();
         showPlayerChrome();
@@ -1856,10 +2059,16 @@ function playTorrent(magnetUri, title) {
     currentStreamUrl = streamUrl;
     currentMagnetUri = magnetUri;
     currentPlayerTitle = title || 'Воспроизведение';
+    currentPlayerHistoryItem = appState.currentDetailsItem ? { ...appState.currentDetailsItem } : null;
+    hasRecordedCurrentPlaybackHistory = false;
     playerMode = 'html5';
-    if (appState.currentDetailsItem) {
-        addToViewHistory(appState.currentDetailsItem);
+
+    if (userSettings.playerTarget === 'msx') {
+        recordCurrentPlaybackHistory();
+        openMsxPlayer(streamUrl, currentPlayerTitle, true);
+        return;
     }
+
     rememberActiveElement();
     
     const {
@@ -1872,6 +2081,7 @@ function playTorrent(magnetUri, title) {
     } = getPlayerElements();
     
     if (!playerModal || !video) {
+        recordCurrentPlaybackHistory();
         window.open(streamUrl, '_blank');
         return;
     }
@@ -1926,6 +2136,7 @@ function playTorrent(magnetUri, title) {
             // РљРѕРіРґР° iframe Р·Р°РіСЂСѓР·РёС‚СЃСЏ вЂ” СЃРєСЂС‹РІР°РµРј РѕРІРµСЂР»РµР№ (РІРёРґРµРѕ СѓР¶Рµ РёРіСЂР°РµС‚ Р·Р° РЅРёРј)
             iframePlayer.onload = () => {
                 if (playerLoading) playerLoading.classList.add('hidden');
+                recordCurrentPlaybackHistory();
                 setPlayerStatus('Iframe', 'Поток открыт через встроенную страницу TorrServer');
                 showPlayerChrome();
             };
@@ -2004,6 +2215,8 @@ function closePlayer() {
     currentStreamUrl = '';
     currentMagnetUri = '';
     currentPlayerTitle = '';
+    currentPlayerHistoryItem = null;
+    hasRecordedCurrentPlaybackHistory = false;
     playerMode = 'html5';
     clearPlayerChromeTimer();
     setPlayerStatus('Подключение', 'Ожидание потока...');
@@ -2025,6 +2238,7 @@ function setupTorrentHandlers() {
     const btnPlayerRestart = document.getElementById('btn-player-restart');
     const btnPlayerFullscreen = document.getElementById('btn-player-fullscreen');
     const btnPlayerExternal = document.getElementById('btn-player-external');
+    const btnPlayerMsx = document.getElementById('btn-player-msx');
     const btnPlayerCopy = document.getElementById('btn-player-copy');
     const torrentFilterBindings = [
         { element: domElements.torrentFilterQuery, key: 'torrentFilterQuery', event: 'input' },
@@ -2076,6 +2290,15 @@ function setupTorrentHandlers() {
         btnPlayerExternal.addEventListener('click', () => {
             if (currentStreamUrl) {
                 window.open(currentStreamUrl, '_blank');
+            }
+        });
+    }
+
+    if (btnPlayerMsx) {
+        btnPlayerMsx.addEventListener('click', () => {
+            if (currentStreamUrl) {
+                recordCurrentPlaybackHistory();
+                openMsxPlayer(currentStreamUrl, currentPlayerTitle);
             }
         });
     }
