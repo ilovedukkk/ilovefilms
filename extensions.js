@@ -99,7 +99,7 @@
     function getInstalledExtensions() {
         try {
             return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-        } catch {
+        } catch (error) {
             return [];
         }
     }
@@ -224,7 +224,7 @@
             const parts = url.split('/');
             const fileName = parts[parts.length - 1] || parts[parts.length - 2];
             return fileName.replace(/\.js$/, '') || url;
-        } catch {
+        } catch (error) {
             return url;
         }
     }
@@ -247,6 +247,77 @@
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, duration);
+    }
+
+    // ==================== Extension Sources (Каталоги) ====================
+    const SOURCES_KEY = 'extension_sources';
+
+    function getSources() {
+        try {
+            return JSON.parse(localStorage.getItem(SOURCES_KEY)) || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function saveSources(list) {
+        localStorage.setItem(SOURCES_KEY, JSON.stringify(list));
+    }
+
+    function addSource(url) {
+        if (!url) return false;
+        const sources = getSources();
+        if (sources.some(s => s.url === url)) return false;
+        sources.push({ url: url, addedAt: Date.now() });
+        saveSources(sources);
+        emit('sources:changed', sources);
+        return true;
+    }
+
+    function removeSource(url) {
+        let sources = getSources();
+        sources = sources.filter(s => s.url !== url);
+        saveSources(sources);
+        emit('sources:changed', sources);
+    }
+
+    /**
+     * Загрузить каталог расширений из всех источников
+     * Каждый источник — JSON массив: [{ name, description, url, icon?, version?, author? }]
+     * @returns {Promise<Array>}
+     */
+    async function fetchCatalog() {
+        const sources = getSources();
+        const catalog = [];
+        const seen = new Set();
+
+        for (const source of sources) {
+            try {
+                const response = await fetch(source.url);
+                if (!response.ok) continue;
+                const data = await response.json();
+                const items = Array.isArray(data) ? data : (data.plugins || data.extensions || []);
+
+                items.forEach(item => {
+                    if (item && item.url && !seen.has(item.url)) {
+                        seen.add(item.url);
+                        catalog.push({
+                            name: item.name || extractName(item.url),
+                            description: item.description || '',
+                            url: item.url,
+                            icon: item.icon || '',
+                            version: item.version || '',
+                            author: item.author || '',
+                            sourceUrl: source.url
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error(`[Extensions] Не удалось загрузить каталог: ${source.url}`, e);
+            }
+        }
+
+        return catalog;
     }
 
     // ==================== Глобальный API ====================
@@ -280,6 +351,12 @@
         list: getInstalledExtensions,
         loadAll: loadAllExtensions,
 
+        // Источники (каталоги расширений)
+        addSource,
+        removeSource,
+        getSources,
+        fetchCatalog,
+
         // Утилиты
         notify: showNotification,
 
@@ -288,7 +365,7 @@
             get(key) {
                 try {
                     return JSON.parse(localStorage.getItem('ext_' + key));
-                } catch {
+                } catch (error) {
                     return null;
                 }
             },

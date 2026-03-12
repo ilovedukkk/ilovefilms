@@ -1,11 +1,152 @@
-﻿// РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ API
+// РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ API
 const API_KEY = 'fd2c701686807e04fcfd87e3daa2da3b';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 const APP_SETTINGS_KEY = 'appSettings';
 const WATCHLIST_STORAGE_KEY = 'watchlistItems';
-const HISTORY_STORAGE_KEY = 'viewHistoryItems';
 const USER_RATINGS_STORAGE_KEY = 'userRatings';
+
+if (!window.requestAnimationFrame) {
+    window.requestAnimationFrame = function (callback) {
+        return setTimeout(callback, 16);
+    };
+}
+
+if (window.NodeList && !NodeList.prototype.forEach) {
+    NodeList.prototype.forEach = Array.prototype.forEach;
+}
+
+if (window.Element && !Element.prototype.matches) {
+    Element.prototype.matches = Element.prototype.msMatchesSelector
+        || Element.prototype.webkitMatchesSelector;
+}
+
+if (window.Element && !Element.prototype.closest) {
+    Element.prototype.closest = function (selector) {
+        var element = this;
+        while (element) {
+            if (element.matches && element.matches(selector)) {
+                return element;
+            }
+            element = element.parentElement;
+        }
+        return null;
+    };
+}
+
+function copyObject(source) {
+    var target = {};
+    var key;
+    source = source || {};
+    for (key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
+            target[key] = source[key];
+        }
+    }
+    return target;
+}
+
+function mergeObjects(base, extra) {
+    var target = copyObject(base);
+    var key;
+    extra = extra || {};
+    for (key in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, key)) {
+            target[key] = extra[key];
+        }
+    }
+    return target;
+}
+
+function flattenSectionItems(sections) {
+    var items = [];
+    (sections || []).forEach(function (section) {
+        var sectionItems = section && section.items ? section.items : [];
+        items = items.concat(sectionItems);
+    });
+    return items;
+}
+
+function createCompatResponse(status, responseText) {
+    return {
+        ok: status >= 200 && status < 300,
+        status: status,
+        text: function () {
+            return Promise.resolve(responseText || '');
+        },
+        json: function () {
+            return Promise.resolve(JSON.parse(responseText || 'null'));
+        }
+    };
+}
+
+function compatFetch(url, options) {
+    var requestOptions = options ? copyObject(options) : {};
+    var timeoutMs = Number(requestOptions.timeoutMs || 0);
+    delete requestOptions.timeoutMs;
+
+    if (window.fetch) {
+        return window.fetch(url, requestOptions);
+    }
+
+    return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        var method = requestOptions.method || 'GET';
+        var headers = requestOptions.headers || {};
+        var timer = null;
+        var key;
+
+        xhr.open(method, url, true);
+
+        if (timeoutMs > 0) {
+            timer = setTimeout(function () {
+                xhr.abort();
+                reject(new Error('Request timeout'));
+            }, timeoutMs);
+        }
+
+        for (key in headers) {
+            if (Object.prototype.hasOwnProperty.call(headers, key)) {
+                xhr.setRequestHeader(key, headers[key]);
+            }
+        }
+
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (timer) clearTimeout(timer);
+            resolve(createCompatResponse(xhr.status || 0, xhr.responseText));
+        };
+
+        xhr.onerror = function () {
+            if (timer) clearTimeout(timer);
+            reject(new Error('Network error'));
+        };
+
+        xhr.send(requestOptions.body || null);
+    });
+}
+
+function getFullscreenElementCompat() {
+    return document.fullscreenElement
+        || document.webkitFullscreenElement
+        || document.msFullscreenElement
+        || null;
+}
+
+function requestFullscreenCompat(element) {
+    if (!element) return Promise.reject(new Error('No element'));
+    if (element.requestFullscreen) return element.requestFullscreen();
+    if (element.webkitRequestFullscreen) return Promise.resolve(element.webkitRequestFullscreen());
+    if (element.msRequestFullscreen) return Promise.resolve(element.msRequestFullscreen());
+    return Promise.reject(new Error('Fullscreen unavailable'));
+}
+
+function exitFullscreenCompat() {
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) return Promise.resolve(document.webkitExitFullscreen());
+    if (document.msExitFullscreen) return Promise.resolve(document.msExitFullscreen());
+    return Promise.reject(new Error('Fullscreen unavailable'));
+}
 
 // Р‘Р°Р·РѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹: РєР»СЋС‡ API Рё СЂСѓСЃСЃРєРёР№ СЏР·С‹Рє
 const DEFAULT_PARAMS = `?api_key=${API_KEY}&language=ru-RU`;
@@ -64,6 +205,7 @@ function initDomElements() {
         btnJackettOpenSearch: document.getElementById('btn-jackett-open-search'),
         inputKinopoiskKey: document.getElementById('input-kinopoisk-key'),
         torrentFilterQuery: document.getElementById('torrent-filter-query'),
+        torrentFilterParser: document.getElementById('torrent-filter-parser'),
         torrentFilterQuality: document.getElementById('torrent-filter-quality'),
         torrentFilterSeeders: document.getElementById('torrent-filter-seeders'),
         torrentFilterSort: document.getElementById('torrent-filter-sort')
@@ -78,6 +220,7 @@ const appState = {
     lastActiveElement: null,
     tvMode: false,
     returnToSettingsFromJackett: false,
+    returnToSettingsFromStore: false,
     torrentResults: [],
     currentDetailsItem: null
 };
@@ -86,7 +229,7 @@ function loadAppSettings() {
     let saved = {};
     try {
         saved = JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)) || {};
-    } catch {
+    } catch (error) {
         saved = {};
     }
 
@@ -97,8 +240,9 @@ function loadAppSettings() {
         torrServerHost: saved.torrServerHost || localStorage.getItem('torrServerHost') || 'http://127.0.0.1:8090',
         preferredParser: saved.preferredParser || localStorage.getItem('preferredParser') || 'https://jac.red',
         kinopoiskApiKey: saved.kinopoiskApiKey || '',
-        playerTarget: hasPlayerTarget ? saved.playerTarget : (isProbablyMediaStationXEnvironment() ? 'msx' : 'internal'),
+        playerTarget: hasPlayerTarget ? saved.playerTarget : (isWebOsEnvironment() ? 'webos' : 'internal'),
         torrentFilterQuery: saved.torrentFilterQuery || '',
+        torrentFilterParser: saved.torrentFilterParser || 'auto',
         torrentFilterQuality: saved.torrentFilterQuality || 'all',
         torrentFilterSeeders: saved.torrentFilterSeeders || '0',
         torrentFilterSort: saved.torrentFilterSort || 'seeders'
@@ -127,13 +271,71 @@ const TV_FOCUSABLE_SELECTOR = [
     '[tabindex]:not([tabindex="-1"])'
 ].join(', ');
 
-function isProbablyMediaStationXEnvironment() {
+
+
+function isWebOsEnvironment() {
     const userAgent = navigator.userAgent || '';
-    return /Media Station X|MediaStationX/i.test(userAgent) || window.location.search.includes('platform=msx');
+    return /web0s|webos|netcast/i.test(userAgent) || !!window.PalmSystem || !!window.webOS;
+}
+
+function isBackActionKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'Escape'
+        || key === 'Backspace'
+        || key === 'BrowserBack'
+        || key === 'GoBack'
+        || key === 'Back'
+        || code === 8
+        || code === 27
+        || code === 461
+        || code === 10009;
+}
+
+function isBrowserNavigationBackKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'Backspace'
+        || key === 'BrowserBack'
+        || key === 'GoBack'
+        || key === 'Back'
+        || code === 8
+        || code === 461
+        || code === 10009;
+}
+
+function isMediaPlayPauseKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'MediaPlayPause' || code === 179;
+}
+
+function isMediaPlayKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'MediaPlay' || code === 415;
+}
+
+function isMediaPauseKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'MediaPause' || code === 19;
+}
+
+function isMediaRewindKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'MediaRewind' || code === 412;
+}
+
+function isMediaFastForwardKey(event) {
+    const key = event.key || '';
+    const code = Number(event.keyCode || event.which || 0);
+    return key === 'MediaFastForward' || code === 417;
 }
 
 function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
@@ -158,32 +360,33 @@ function persistUserSettings() {
     localStorage.setItem('preferredParser', userSettings.preferredParser);
 }
 
-function buildMsxPlayerUrl(streamUrl, title) {
-    const url = new URL('msx-player.html', window.location.href);
-    url.searchParams.set('src', streamUrl);
-    if (title) {
-        url.searchParams.set('title', title);
-    }
-    url.searchParams.set('return', window.location.href);
-    return url.toString();
-}
-
-function openMsxPlayer(streamUrl, title, sameTab = false) {
+function openWebOsPlayer(streamUrl, title) {
     if (!streamUrl) return;
 
-    const url = buildMsxPlayerUrl(streamUrl, title);
-    if (sameTab) {
-        window.location.assign(url);
-        return;
+    if (window.webOS && window.webOS.service && window.webOS.service.request) {
+        window.webOS.service.request('luna://com.webos.applicationManager', {
+            method: 'launch',
+            parameters: {
+                id: 'com.webos.app.photovideo',
+                params: {
+                    target: streamUrl,
+                    title: title || 'ilovefilms'
+                }
+            },
+            onFailure: function() {
+                showAppNotification('Ошибка запуска нативного плеера');
+            }
+        });
+    } else {
+        showAppNotification('Плеер webOS доступен только на телевизорах LG');
+        window.open(streamUrl, '_blank');
     }
-
-    window.open(url, '_blank');
 }
 
 function getUserRatings() {
     try {
         return JSON.parse(localStorage.getItem(USER_RATINGS_STORAGE_KEY)) || {};
-    } catch {
+    } catch (error) {
         return {};
     }
 }
@@ -200,6 +403,13 @@ function rememberActiveElement() {
     const activeElement = document.activeElement;
     if (activeElement && activeElement !== document.body) {
         appState.lastActiveElement = activeElement;
+    }
+}
+
+function focusFirstNavigableElement() {
+    const focusableElements = getFocusableElements(getNavigationRoot());
+    if (focusableElements.length) {
+        applyTvFocus(focusableElements[0], { scroll: false });
     }
 }
 
@@ -284,6 +494,9 @@ function getNavigationRoot() {
         return domElements.jackettPage;
     }
 
+    const storePage = document.getElementById('store-page');
+    if (storePage && !storePage.classList.contains('hidden')) return storePage;
+
     const settingsModal = document.getElementById('settings-modal');
     if (settingsModal && !settingsModal.classList.contains('hidden')) return settingsModal;
 
@@ -307,8 +520,7 @@ function getSiblingFocusGroup(element) {
 
     const containers = [
         '.hero-buttons',
-        '.nav-links',
-        '.nav-actions',
+        '.sidebar-bottom',
         '.details-actions',
         '.player-actions',
         '.settings-options',
@@ -335,6 +547,11 @@ function getSiblingFocusGroup(element) {
         return container ? getFocusableElements(container).filter((item) => item.matches('.torrent-item')) : [];
     }
 
+    if (element.matches('.nav-item')) {
+        const container = element.closest('.nav-links');
+        return container ? getFocusableElements(container).filter((item) => item.matches('.nav-item')) : [];
+    }
+
     return [];
 }
 
@@ -344,6 +561,13 @@ function moveWithinGroup(currentElement, direction) {
 
     const index = group.indexOf(currentElement);
     if (index === -1) return null;
+
+    // Sidebar nav-items are vertical — use up/down
+    if (currentElement.matches('.nav-item')) {
+        if (direction === 'up' && index > 0) return group[index - 1];
+        if (direction === 'down' && index < group.length - 1) return group[index + 1];
+        return null;
+    }
 
     if (direction === 'left' && index > 0) return group[index - 1];
     if (direction === 'right' && index < group.length - 1) return group[index + 1];
@@ -376,6 +600,21 @@ function getDirectionalScore(fromRect, toRect, direction) {
 function findNextFocusable(currentElement, direction, focusableElements) {
     const groupedTarget = moveWithinGroup(currentElement, direction);
     if (groupedTarget) return groupedTarget;
+
+    // Movie cards: tight horizontal navigation
+    if (currentElement.matches('.movie-card')) {
+        if (direction === 'right') return null;
+        if (direction === 'left') {
+            // Only allow jumping to the sidebar to prevent diagonal jumping to other rows
+            focusableElements = focusableElements.filter(el => el.closest('.sidebar'));
+            if (focusableElements.length === 0) return null;
+        }
+    }
+
+    // Sidebar nav-items: up/down stays within sidebar, left does nothing
+    if (currentElement.matches('.nav-item')) {
+        if (direction === 'up' || direction === 'down' || direction === 'left') return null;
+    }
 
     const currentRect = currentElement.getBoundingClientRect();
     let bestCandidate = null;
@@ -435,7 +674,7 @@ function getWatchlist() {
             return migrated;
         }
         return [];
-    } catch {
+    } catch (error) {
         return [];
     }
 }
@@ -444,17 +683,7 @@ function saveWatchlist(items) {
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(items));
 }
 
-function getViewHistory() {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
-    } catch {
-        return [];
-    }
-}
 
-function saveViewHistory(items) {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(items));
-}
 
 function isFavorite(item) {
     return getWatchlist().some((favorite) => favorite.key === getFavoriteKey(item));
@@ -521,30 +750,7 @@ function toggleFavorite(item) {
     }
 }
 
-function addToViewHistory(item) {
-    if (!item || !item.id) return;
 
-    const history = getViewHistory();
-    const entryKey = getFavoriteKey(item);
-    const filtered = history.filter((entry) => entry.key !== entryKey);
-    filtered.unshift({
-        key: entryKey,
-        id: item.id,
-        type: getMediaType(item),
-        title: item.title || item.name || 'Без названия',
-        poster_path: item.poster_path || null,
-        backdrop_path: item.backdrop_path || null,
-        vote_average: item.vote_average || 0,
-        release_date: item.release_date || item.first_air_date || '',
-        overview: item.overview || '',
-        watchedAt: Date.now()
-    });
-
-    saveViewHistory(filtered.slice(0, 48));
-    if (['home', 'discover', 'history'].includes(appState.currentView)) {
-        loadCategory(appState.currentView);
-    }
-}
 
 function getHomeSection(index) {
     return domElements.homeSections[index] || null;
@@ -559,10 +765,9 @@ function setSectionContent(index, title, items) {
 }
 
 function normalizeStoredItem(item) {
-    return {
-        ...item,
+    return mergeObjects(item, {
         media_type: item.media_type || item.type || getMediaType(item)
-    };
+    });
 }
 
 async function fetchRecommendationsForItems(items) {
@@ -612,9 +817,9 @@ function getImageSize(type) {
  * @param {string} endpoint - РџСѓС‚СЊ Рє API (РЅР°РїСЂРёРјРµСЂ, /movie/popular)
  * @returns {Promise<Array>} РњР°СЃСЃРёРІ С„РёР»СЊРјРѕРІ
  */
-async function fetchMovies(endpoint) {
+async function fetchMovies(endpoint, extraParams = '') {
     try {
-        const response = await fetch(`${BASE_URL}${endpoint}${DEFAULT_PARAMS}`);
+        const response = await fetch(`${BASE_URL}${endpoint}${DEFAULT_PARAMS}${extraParams}`);
         if (!response.ok) {
             throw new Error(`HTTP РѕС€РёР±РєР°: ${response.status}`);
         }
@@ -633,19 +838,12 @@ function getLatestWatchlistItems(limit = 20) {
         .map(normalizeStoredItem);
 }
 
-function getLatestHistoryItems(limit = 20) {
-    return getViewHistory()
-        .sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0))
-        .slice(0, limit)
-        .map(normalizeStoredItem);
-}
+
 
 async function buildSectionsForCategory(category) {
-    const historyItems = getLatestHistoryItems();
     const watchlistItems = getLatestWatchlistItems();
-    let recommendationSeed = historyItems.length ? historyItems : watchlistItems;
-    let recommendations = recommendationSeed.length
-        ? await fetchRecommendationsForItems(recommendationSeed)
+    let recommendations = watchlistItems.length
+        ? await fetchRecommendationsForItems(watchlistItems)
         : await fetchMovies('/trending/movie/week');
 
     if (category === 'movies') {
@@ -676,34 +874,89 @@ async function buildSectionsForCategory(category) {
             { title: 'Топ сериалов', items: topRated },
             { title: 'Сегодня в эфире', items: airingToday },
             { title: 'Сейчас идут', items: onTheAir },
-            { title: 'История просмотра', items: historyItems }
+            { title: 'Буду смотреть', items: watchlistItems }
+        ];
+    }
+
+    if (category === 'action') {
+        const [actionMovies, actionTv, warMovies, adventureMovies, thrillerMovies] = await Promise.all([
+            fetchMovies('/discover/movie', '&with_genres=28&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=10759&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=10752&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=12&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=53&sort_by=popularity.desc')
+        ]);
+        return [
+            { title: 'Популярные боевики', items: actionMovies },
+            { title: 'Экшн-сериалы', items: actionTv },
+            { title: 'Приключения', items: adventureMovies },
+            { title: 'Триллеры', items: thrillerMovies },
+            { title: 'Военные', items: warMovies }
+        ];
+    }
+
+    if (category === 'comedy') {
+        const [comedyMovies, comedyTv, romanceMovies, familyMovies, animationMovies] = await Promise.all([
+            fetchMovies('/discover/movie', '&with_genres=35&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=35&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=10749&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=10751&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=16&sort_by=popularity.desc')
+        ]);
+        return [
+            { title: 'Популярные комедии', items: comedyMovies },
+            { title: 'Комедийные сериалы', items: comedyTv },
+            { title: 'Романтика', items: romanceMovies },
+            { title: 'Семейные', items: familyMovies },
+            { title: 'Мультфильмы', items: animationMovies }
+        ];
+    }
+
+    if (category === 'horror') {
+        const [horrorMovies, horrorTv, sciFiMovies, mysteryMovies, fantasyMovies] = await Promise.all([
+            fetchMovies('/discover/movie', '&with_genres=27&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=9648&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=878&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=9648&sort_by=popularity.desc'),
+            fetchMovies('/discover/movie', '&with_genres=14&sort_by=popularity.desc')
+        ]);
+        return [
+            { title: 'Популярные ужасы', items: horrorMovies },
+            { title: 'Мистические сериалы', items: horrorTv },
+            { title: 'Фантастика', items: sciFiMovies },
+            { title: 'Детективы', items: mysteryMovies },
+            { title: 'Фэнтези', items: fantasyMovies }
+        ];
+    }
+
+    if (category === 'anime') {
+        const [animePopular, animeTopRated, animeAction, animeRomance, animeAiring] = await Promise.all([
+            fetchMovies('/discover/tv', '&with_genres=16&with_original_language=ja&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=16&with_original_language=ja&sort_by=vote_average.desc&vote_count.gte=200'),
+            fetchMovies('/discover/tv', '&with_genres=16,10759&with_original_language=ja&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=16,35&with_original_language=ja&sort_by=popularity.desc'),
+            fetchMovies('/discover/tv', '&with_genres=16&with_original_language=ja&air_date.gte=' + new Date(Date.now() - 90 * 86400000).toISOString().substring(0, 10))
+        ]);
+        return [
+            { title: 'Популярное аниме', items: animePopular },
+            { title: 'Топ аниме по рейтингу', items: animeTopRated },
+            { title: 'Экшн и приключения', items: animeAction },
+            { title: 'Комедия и романтика', items: animeRomance },
+            { title: 'Новинки сезона', items: animeAiring }
         ];
     }
 
     if (category === 'discover') {
-        const [trendingMovies, trendingTv] = await Promise.all([
+        const [trendingMovies, trendingTv, docMovies] = await Promise.all([
             fetchMovies('/trending/movie/week'),
-            fetchMovies('/trending/tv/week')
+            fetchMovies('/trending/tv/week'),
+            fetchMovies('/discover/movie', '&with_genres=99&sort_by=popularity.desc')
         ]);
         return [
             { title: 'Рекомендации для вас', items: recommendations },
             { title: 'Фильмы недели', items: trendingMovies },
             { title: 'Сериалы недели', items: trendingTv },
-            { title: 'История просмотра', items: historyItems },
-            { title: 'Буду смотреть', items: watchlistItems }
-        ];
-    }
-
-    if (category === 'history') {
-        const [popular, recommendationsFromHistory] = await Promise.all([
-            fetchMovies('/movie/popular'),
-            historyItems.length ? fetchRecommendationsForItems(historyItems) : fetchMovies('/trending/movie/week')
-        ]);
-        return [
-            { title: 'Вы уже смотрели', items: historyItems },
-            { title: 'На основе истории', items: recommendationsFromHistory },
-            { title: 'Фильмы, которые сейчас обсуждают', items: popular },
-            { title: 'Продолжить исследовать', items: await fetchMovies('/tv/popular') },
+            { title: 'Документальные', items: docMovies },
             { title: 'Буду смотреть', items: watchlistItems }
         ];
     }
@@ -719,22 +972,24 @@ async function buildSectionsForCategory(category) {
             { title: 'Рекомендации по списку', items: recommendationsFromWatchlist },
             { title: 'Популярные фильмы', items: popularMovies },
             { title: 'Популярные сериалы', items: popularTv },
-            { title: 'История просмотра', items: historyItems }
+            { title: 'В тренде', items: await fetchMovies('/trending/movie/week') }
         ];
     }
 
-    const [trendingMovies, popularTv, nowPlaying, topRatedMovies] = await Promise.all([
+    // default = home
+    const [trendingMovies, popularTv, nowPlaying, topRatedMovies, dramaMovies] = await Promise.all([
         fetchMovies('/trending/movie/week'),
         fetchMovies('/tv/popular'),
         fetchMovies('/movie/now_playing'),
-        fetchMovies('/movie/top_rated')
+        fetchMovies('/movie/top_rated'),
+        fetchMovies('/discover/movie', '&with_genres=18&sort_by=popularity.desc')
     ]);
 
     return [
         { title: 'В тренде сейчас', items: trendingMovies },
         { title: 'Популярные сериалы', items: popularTv },
         { title: 'Рекомендации для вас', items: recommendations },
-        { title: 'История просмотра', items: historyItems.length ? historyItems : nowPlaying },
+        { title: 'Драмы', items: dramaMovies },
         { title: 'Буду смотреть', items: watchlistItems.length ? watchlistItems : topRatedMovies }
     ];
 }
@@ -1177,7 +1432,7 @@ function setupDetailsPageHandlers() {
             // РРіРЅРѕСЂРёСЂСѓРµРј, РµСЃР»Рё С„РѕРєСѓСЃ РІ РёРЅРїСѓС‚Рµ
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-            if (e.key === 'Escape' || e.key === 'Backspace') {
+            if (isBackActionKey(e)) {
                 e.preventDefault();
                 closeDetailsPage();
             }
@@ -1195,7 +1450,7 @@ async function loadCategory(category) {
     if (window.Lampa) Lampa.emit('category:change', category);
 
     const sections = await buildSectionsForCategory(category);
-    const heroSource = sections.flatMap((section) => section.items || []).find(Boolean);
+    const heroSource = flattenSectionItems(sections).find(Boolean);
     if (heroSource) {
         renderHero(heroSource);
     } else {
@@ -1236,8 +1491,8 @@ async function runSearch(query) {
     setSectionContent(0, `Результаты: ${normalizedQuery}`, []);
     setSectionContent(1, 'Сериалы и фильмы', []);
     setSectionContent(2, 'Рекомендации', []);
-    setSectionContent(3, 'История просмотра', getLatestHistoryItems());
-    setSectionContent(4, 'Буду смотреть', getLatestWatchlistItems());
+    setSectionContent(3, 'Буду смотреть', getLatestWatchlistItems());
+    setSectionContent(4, 'В тренде', []);
 
     try {
         const response = await fetch(`${BASE_URL}/search/multi${DEFAULT_PARAMS}&query=${encodeURIComponent(normalizedQuery)}&include_adult=false`);
@@ -1264,8 +1519,8 @@ async function runSearch(query) {
         setSectionContent(0, `Результаты: ${normalizedQuery}`, primary);
         setSectionContent(1, 'Сериалы и фильмы', secondary);
         setSectionContent(2, 'Похожие рекомендации', recommendations);
-        setSectionContent(3, 'История просмотра', getLatestHistoryItems());
-        setSectionContent(4, 'Буду смотреть', getLatestWatchlistItems());
+        setSectionContent(3, 'Буду смотреть', getLatestWatchlistItems());
+        setSectionContent(4, 'В тренде', await fetchMovies('/trending/movie/week'));
     } catch (error) {
         console.error('Ошибка поиска:', error);
         setSectionContent(0, `Результаты: ${normalizedQuery}`, []);
@@ -1446,8 +1701,8 @@ function setupJackettPage() {
     }
 
     domElements.jackettPage.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' || e.key === 'Backspace') {
-            if (isTextInputElement(e.target) && e.key === 'Backspace') return;
+        if (isBackActionKey(e)) {
+            if (isTextInputElement(e.target) && isBrowserNavigationBackKey(e)) return;
             e.preventDefault();
             closeJackettPage();
         }
@@ -1535,8 +1790,8 @@ function setupSettings() {
             userSettings.playerTarget = nextTarget;
             persistUserSettings();
             syncPlayerTargetButtons();
-            showAppNotification(nextTarget === 'msx'
-                ? 'Потоки будут открываться в режиме Media Station X'
+            showAppNotification(nextTarget === 'webos'
+                ? 'Потоки будут открываться в нативном плеере webOS'
                 : 'Потоки будут открываться во встроенном плеере');
         });
     });
@@ -1544,11 +1799,11 @@ function setupSettings() {
     // РћР±СЂР°Р±РѕС‚РєР° РєР»Р°РІРёС€ РІ РјРѕРґР°Р»РєРµ (Esc/Backspace)
     settingsModal.addEventListener('keydown', (e) => {
         // РРіРЅРѕСЂРёСЂСѓРµРј, РµСЃР»Рё С„РѕРєСѓСЃ РІ РёРЅРїСѓС‚Рµ РїСЂРё РЅР°Р¶Р°С‚РёРё Backspace
-        if (e.key === 'Backspace' && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+        if (isBrowserNavigationBackKey(e) && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
             return;
         }
 
-        if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (isBackActionKey(e)) {
             e.preventDefault();
             closeSettings();
         }
@@ -1588,17 +1843,19 @@ function setupSettings() {
  */
 async function tryParser(parserHost, query) {
     const url = `${parserHost}${JACKETT_API_PATH}?apikey=&query=${encodeURIComponent(query)}&_=${Date.now()}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000); // 8СЃРµРє С‚Р°Р№РјР°СѓС‚
+    const supportsAbortController = typeof AbortController !== 'undefined';
+    const controller = supportsAbortController ? new AbortController() : null;
+    const timeoutOptions = supportsAbortController ? { signal: controller.signal } : { timeoutMs: 8000 };
+    const timeout = supportsAbortController ? setTimeout(() => controller.abort(), 8000) : null; // 8 sec timeout
     
     try {
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
+        const response = await compatFetch(url, timeoutOptions);
+        if (timeout) clearTimeout(timeout);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return data.Results || [];
     } catch (error) {
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
         console.warn(`РџР°СЂСЃРµСЂ ${parserHost} РЅРµ РѕС‚РІРµС‚РёР»:`, error.message);
         return null; // null = РѕС€РёР±РєР°
     }
@@ -1610,7 +1867,7 @@ async function tryParser(parserHost, query) {
  * @param {function} onStatusUpdate - РєРѕР»Р»Р±СЌРє РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ СЃС‚Р°С‚СѓСЃР°
  * @returns {Promise<{results: Array|null, usedParser: string|null}>}
  */
-async function searchTorrents(query, onStatusUpdate) {
+function getParsersList() {
     const builtInParsers = JACKETT_PARSERS.map((url) => ({
         key: url,
         name: url.replace(/^https?:\/\//, ''),
@@ -1633,11 +1890,18 @@ async function searchTorrents(query, onStatusUpdate) {
                 : (value) => tryParser(parser.url, value)
         }))
         : [];
-    const parsers = [...builtInParsers, ...customParsers].sort((a, b) => {
+    return [...builtInParsers, ...customParsers].sort((a, b) => {
         if (a.key === userSettings.preferredParser) return -1;
         if (b.key === userSettings.preferredParser) return 1;
         return 0;
     });
+}
+
+async function searchTorrents(query, onStatusUpdate, parserKey) {
+    let parsers = getParsersList();
+    if (parserKey && parserKey !== 'auto') {
+        parsers = parsers.filter((p) => p.key === parserKey);
+    }
 
     for (const parser of parsers) {
         if (onStatusUpdate) {
@@ -1672,8 +1936,24 @@ function getTorrentQualityMarker(title) {
     return 'other';
 }
 
+function populateParserSelect() {
+    const sel = domElements.torrentFilterParser;
+    if (!sel) return;
+    const currentValue = sel.value || userSettings.torrentFilterParser || 'auto';
+    sel.innerHTML = '<option value="auto">Авто</option>';
+    const parsers = getParsersList();
+    parsers.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+    });
+    sel.value = parsers.some((p) => p.key === currentValue) ? currentValue : 'auto';
+}
+
 function syncTorrentFilterInputs() {
     if (domElements.torrentFilterQuery) domElements.torrentFilterQuery.value = userSettings.torrentFilterQuery;
+    if (domElements.torrentFilterParser) domElements.torrentFilterParser.value = userSettings.torrentFilterParser || 'auto';
     if (domElements.torrentFilterQuality) domElements.torrentFilterQuality.value = userSettings.torrentFilterQuality;
     if (domElements.torrentFilterSeeders) domElements.torrentFilterSeeders.value = userSettings.torrentFilterSeeders;
     if (domElements.torrentFilterSort) domElements.torrentFilterSort.value = userSettings.torrentFilterSort;
@@ -1739,16 +2019,18 @@ async function openTorrentSearch(query) {
     status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ищем раздачи...';
     status.style.display = 'flex';
     list.innerHTML = '';
+    populateParserSelect();
     syncTorrentFilterInputs();
     appState.torrentResults = [];
+    appState.torrentSearchQuery = query;
     if (btnCloseTorrents) {
         applyTvFocus(btnCloseTorrents, { scroll: false });
     }
     
-    // РџРѕРёСЃРє СЃ С„РѕР»Р±РµРєРѕРј
+    const parserKey = userSettings.torrentFilterParser || 'auto';
     const { results, usedParser } = await searchTorrents(query, (html) => {
         status.innerHTML = html;
-    });
+    }, parserKey !== 'auto' ? parserKey : undefined);
     
     if (results === null) {
         status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Ни один парсер не ответил. Проверьте интернет.';
@@ -1837,9 +2119,7 @@ function isPlayerLoadingVisible() {
 }
 
 function recordCurrentPlaybackHistory() {
-    if (hasRecordedCurrentPlaybackHistory || !currentPlayerHistoryItem) return;
-    addToViewHistory(currentPlayerHistoryItem);
-    hasRecordedCurrentPlaybackHistory = true;
+    // no-op: history tracking removed
 }
 
 function showPlayerChrome(scheduleHide = true) {
@@ -1891,7 +2171,7 @@ function getPlayerElements() {
         btnRestart: document.getElementById('btn-player-restart'),
         btnFullscreen: document.getElementById('btn-player-fullscreen'),
         btnExternal: document.getElementById('btn-player-external'),
-        btnMsx: document.getElementById('btn-player-msx'),
+        btnWebos: document.getElementById('btn-player-webos'),
         btnCopy: document.getElementById('btn-player-copy'),
         btnClose: document.getElementById('btn-close-player')
     };
@@ -1942,7 +2222,7 @@ function updatePlayerButtonsState() {
     }
 
     if (btnFullscreen) {
-        const fullscreenActive = !!document.fullscreenElement;
+        const fullscreenActive = !!getFullscreenElementCompat();
         btnFullscreen.classList.toggle('active', fullscreenActive);
         btnFullscreen.innerHTML = fullscreenActive
             ? '<i class="fa-solid fa-compress"></i><span>Окно</span>'
@@ -1984,12 +2264,12 @@ async function togglePlayerFullscreen() {
     if (!modal) return;
 
     try {
-        if (document.fullscreenElement) {
-            await document.exitFullscreen();
+        if (getFullscreenElementCompat()) {
+            await exitFullscreenCompat();
         } else {
-            await modal.requestFullscreen();
+            await requestFullscreenCompat(modal);
         }
-    } catch {
+    } catch (error) {
         showAppNotification('Полный экран недоступен');
     } finally {
         updatePlayerButtonsState();
@@ -2063,9 +2343,9 @@ function playTorrent(magnetUri, title) {
     hasRecordedCurrentPlaybackHistory = false;
     playerMode = 'html5';
 
-    if (userSettings.playerTarget === 'msx') {
+    if (userSettings.playerTarget === 'webos') {
         recordCurrentPlaybackHistory();
-        openMsxPlayer(streamUrl, currentPlayerTitle, true);
+        openWebOsPlayer(streamUrl, currentPlayerTitle);
         return;
     }
 
@@ -2208,8 +2488,8 @@ function closePlayer() {
         playerModal.classList.remove('player-chrome-hidden');
         playerModal.classList.add('hidden');
     }
-    if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+    if (getFullscreenElementCompat()) {
+        exitFullscreenCompat().catch(() => {});
     }
     
     currentStreamUrl = '';
@@ -2238,7 +2518,7 @@ function setupTorrentHandlers() {
     const btnPlayerRestart = document.getElementById('btn-player-restart');
     const btnPlayerFullscreen = document.getElementById('btn-player-fullscreen');
     const btnPlayerExternal = document.getElementById('btn-player-external');
-    const btnPlayerMsx = document.getElementById('btn-player-msx');
+    const btnPlayerWebos = document.getElementById('btn-player-webos');
     const btnPlayerCopy = document.getElementById('btn-player-copy');
     const torrentFilterBindings = [
         { element: domElements.torrentFilterQuery, key: 'torrentFilterQuery', event: 'input' },
@@ -2264,6 +2544,39 @@ function setupTorrentHandlers() {
             applyTorrentFilters();
         });
     });
+
+    if (domElements.torrentFilterParser) {
+        domElements.torrentFilterParser.addEventListener('change', async () => {
+            userSettings.torrentFilterParser = domElements.torrentFilterParser.value;
+            persistUserSettings();
+            const titleElement = document.getElementById('torrent-modal-title');
+            const query = appState.torrentSearchQuery || (titleElement ? titleElement.textContent : '');
+            if (!query) {
+                applyTorrentFilters();
+                return;
+            }
+            const status = document.getElementById('torrent-status');
+            const list = document.getElementById('torrent-list');
+            status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ищем раздачи...';
+            list.innerHTML = '';
+            const parserKey = userSettings.torrentFilterParser === 'auto' ? undefined : userSettings.torrentFilterParser;
+            const { results, usedParser } = await searchTorrents(query, (html) => { status.innerHTML = html; }, parserKey);
+            if (results === null) {
+                status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Парсер не ответил.';
+                appState.torrentResults = [];
+                return;
+            }
+            if (results.length === 0) {
+                status.innerHTML = '<i class="fa-solid fa-circle-info"></i> Раздачи не найдены.';
+                appState.torrentResults = [];
+                return;
+            }
+            const parserName = usedParser ? usedParser.replace(/^https?:\/\//, '') : '';
+            status.innerHTML = `<i class="fa-solid fa-check"></i> Найдено ${results.length} раздач (${parserName})`;
+            appState.torrentResults = results;
+            applyTorrentFilters();
+        });
+    }
     
     if (btnClosePlayer) {
         btnClosePlayer.addEventListener('click', closePlayer);
@@ -2294,11 +2607,11 @@ function setupTorrentHandlers() {
         });
     }
 
-    if (btnPlayerMsx) {
-        btnPlayerMsx.addEventListener('click', () => {
+    if (btnPlayerWebos) {
+        btnPlayerWebos.addEventListener('click', () => {
             if (currentStreamUrl) {
                 recordCurrentPlaybackHistory();
-                openMsxPlayer(currentStreamUrl, currentPlayerTitle);
+                openWebOsPlayer(currentStreamUrl, currentPlayerTitle);
             }
         });
     }
@@ -2336,7 +2649,7 @@ function setupTorrentHandlers() {
                 try {
                     document.execCommand('copy');
                     completeCopy();
-                } catch {
+                } catch (error) {
                     showAppNotification('Не удалось скопировать ссылку');
                 } finally {
                     helperInput.remove();
@@ -2351,7 +2664,7 @@ function setupTorrentHandlers() {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
         const playerModal = document.getElementById('player-modal');
-        if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (isBackActionKey(e)) {
             if (playerModal && !playerModal.classList.contains('hidden')) {
                 e.preventDefault();
                 closePlayer();
@@ -2368,9 +2681,27 @@ function setupTorrentHandlers() {
         const playerModal = document.getElementById('player-modal');
         if (!playerModal || playerModal.classList.contains('hidden')) return;
 
-        if (['Space', ' '].includes(e.key)) {
+        if (['Space', ' '].includes(e.key) || isMediaPlayPauseKey(e)) {
             e.preventDefault();
             togglePlayerPlayback();
+            return;
+        }
+
+        if (isMediaPlayKey(e)) {
+            e.preventDefault();
+            const { video } = getPlayerElements();
+            if (video && playerMode === 'html5') {
+                video.play().catch(() => {});
+            }
+            return;
+        }
+
+        if (isMediaPauseKey(e)) {
+            e.preventDefault();
+            const { video } = getPlayerElements();
+            if (video && playerMode === 'html5') {
+                video.pause();
+            }
             return;
         }
 
@@ -2392,13 +2723,13 @@ function setupTorrentHandlers() {
             return;
         }
 
-        if (e.key === 'ArrowLeft') {
+        if (e.key === 'ArrowLeft' || isMediaRewindKey(e)) {
             e.preventDefault();
             seekPlayer(-10);
             return;
         }
 
-        if (e.key === 'ArrowRight') {
+        if (e.key === 'ArrowRight' || isMediaFastForwardKey(e)) {
             e.preventDefault();
             seekPlayer(10);
             return;
@@ -2441,7 +2772,7 @@ function setupTorrentHandlers() {
  */
 function setupGlobalKeyHandlers() {
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace') {
+        if (isBrowserNavigationBackKey(e)) {
             const target = e.target;
             // Р Р°Р·СЂРµС€Р°РµРј Backspace С‚РѕР»СЊРєРѕ РІ РїРѕР»СЏС… РІРІРѕРґР°
             if (isTextInputElement(target)) {
@@ -2519,6 +2850,17 @@ function setupSpatialNavigation() {
         enableTvMode();
         e.preventDefault();
         document.activeElement.click();
+    });
+}
+
+function setupWebOsSupport() {
+    if (!isWebOsEnvironment()) return;
+
+    document.body.classList.add('webos-platform');
+    enableTvMode();
+
+    requestAnimationFrame(() => {
+        focusFirstNavigableElement();
     });
 }
 
@@ -2612,6 +2954,275 @@ function setupExtensions() {
     Lampa.on('extensions:changed', () => renderExtList());
 }
 
+function setupExtensionStore() {
+    const storePage = document.getElementById('store-page');
+    const btnBack = document.getElementById('btn-back-store');
+    const btnOpen = document.getElementById('btn-open-store');
+    const sourceInput = document.getElementById('input-store-source');
+    const btnAddSource = document.getElementById('btn-store-add-source');
+    const sourceList = document.getElementById('store-source-list');
+    const catalog = document.getElementById('store-catalog');
+    const btnRefresh = document.getElementById('btn-store-refresh');
+    const searchInput = document.getElementById('input-store-search');
+
+    if (!storePage || !Lampa) return;
+
+    let catalogCache = [];
+
+    // -- Open / Close --
+    function openStore(options = {}) {
+        const { fromSettings = false } = options;
+        const settingsModal = document.getElementById('settings-modal');
+        
+        rememberActiveElement();
+        appState.returnToSettingsFromStore = fromSettings;
+
+        if (fromSettings && settingsModal) {
+            settingsModal.classList.add('hidden');
+        }
+        
+        storePage.classList.remove('hidden');
+        renderSources();
+        loadCatalog();
+        
+        if (appState.tvMode) {
+            requestAnimationFrame(() => focusFirstNavigableElement());
+        }
+    }
+
+    function closeStore() {
+        storePage.classList.add('hidden');
+        appState.lastActiveElement = null;
+
+        if (appState.returnToSettingsFromStore) {
+            appState.returnToSettingsFromStore = false;
+            const settingsModal = document.getElementById('settings-modal');
+            if (settingsModal) {
+                settingsModal.classList.remove('hidden');
+                if (btnOpen && appState.tvMode) {
+                    applyTvFocus(btnOpen, { scroll: false });
+                }
+            }
+            return;
+        }
+
+        restorePreviousFocus();
+    }
+
+    if (btnOpen) btnOpen.addEventListener('click', () => openStore({ fromSettings: true }));
+    if (btnBack) btnBack.addEventListener('click', closeStore);
+
+    storePage.addEventListener('keydown', (e) => {
+        if (isBackActionKey(e)) {
+            if (isTextInputElement(e.target) && isBrowserNavigationBackKey(e)) return;
+            e.preventDefault();
+            closeStore();
+        }
+    });
+
+    // -- Sources --
+    function renderSources() {
+        const sources = Lampa.getSources();
+
+        if (sources.length === 0) {
+            sourceList.innerHTML = '<div class="store-source-empty"><i class="fa-solid fa-link-slash"></i> Нет добавленных источников</div>';
+            return;
+        }
+
+        sourceList.innerHTML = '';
+        sources.forEach(source => {
+            const item = document.createElement('div');
+            item.className = 'store-source-item';
+            item.innerHTML = 
+                '<div class="store-source-icon"><i class="fa-solid fa-link"></i></div>' +
+                '<div class="store-source-url" title="' + escapeHtml(source.url) + '">' + escapeHtml(source.url) + '</div>' +
+                '<button class="store-source-remove" title="Удалить" tabindex="0"><i class="fa-solid fa-trash"></i></button>';
+
+            item.querySelector('.store-source-remove').addEventListener('click', () => {
+                Lampa.removeSource(source.url);
+                renderSources();
+                loadCatalog();
+                Lampa.notify('Источник удалён');
+            });
+
+            sourceList.appendChild(item);
+        });
+    }
+
+    if (btnAddSource) {
+        btnAddSource.addEventListener('click', () => {
+            const url = (sourceInput.value || '').trim();
+            if (!url) {
+                Lampa.notify('Введите URL источника');
+                return;
+            }
+            if (!url.startsWith('http')) {
+                Lampa.notify('URL должен начинаться с http:// или https://');
+                return;
+            }
+            const added = Lampa.addSource(url);
+            if (!added) {
+                Lampa.notify('Этот источник уже добавлен');
+                return;
+            }
+            sourceInput.value = '';
+            Lampa.notify('Источник добавлен');
+            renderSources();
+            loadCatalog();
+        });
+    }
+
+    if (sourceInput) {
+        sourceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') btnAddSource.click();
+        });
+    }
+
+    // -- Catalog --
+    function isExtInstalled(url) {
+        return Lampa.list().some(ext => ext.url === url);
+    }
+
+    function renderCatalog(items) {
+        if (!items || items.length === 0) {
+            catalog.innerHTML = '<div class="store-catalog-empty"><i class="fa-solid fa-box-open"></i><p>Расширения не найдены</p></div>';
+            return;
+        }
+
+        catalog.innerHTML = '';
+        items.forEach((ext, index) => {
+            const installed = isExtInstalled(ext.url);
+            const card = document.createElement('div');
+            card.className = 'store-card';
+            card.style.animationDelay = (index * 0.04) + 's';
+
+            const iconClass = ext.icon || 'fa-solid fa-puzzle-piece';
+            const authorHtml = ext.author ? '<div class="store-card-author">' + escapeHtml(ext.author) + '</div>' : '';
+            const versionHtml = ext.version ? '<span class="store-card-version">v' + escapeHtml(ext.version) + '</span>' : '';
+
+            card.innerHTML = 
+                '<div class="store-card-top">' +
+                    '<div class="store-card-icon"><i class="' + iconClass + '"></i></div>' +
+                    '<div class="store-card-info">' +
+                        '<div class="store-card-name">' + escapeHtml(ext.name) + '</div>' +
+                        authorHtml + versionHtml +
+                    '</div>' +
+                '</div>' +
+                (ext.description ? '<div class="store-card-desc">' + escapeHtml(ext.description) + '</div>' : '') +
+                '<div class="store-card-actions">' +
+                    (installed
+                        ? '<button class="store-card-btn store-card-btn-installed" tabindex="0" data-url="' + escapeHtml(ext.url) + '"><i class="fa-solid fa-check"></i> Установлено</button>'
+                        : '<button class="store-card-btn store-card-btn-install" tabindex="0" data-url="' + escapeHtml(ext.url) + '"><i class="fa-solid fa-download"></i> Установить</button>'
+                    ) +
+                '</div>';
+
+            const btn = card.querySelector('.store-card-btn');
+            btn.addEventListener('click', async () => {
+                const extUrl = btn.dataset.url;
+
+                if (installed) {
+                    Lampa.remove(extUrl);
+                    Lampa.notify('Расширение удалено. Перезагрузите страницу.');
+                    renderCatalog(filterCatalog());
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Загрузка...';
+                const success = await Lampa.install(extUrl, ext.name);
+
+                if (success) {
+                    Lampa.notify('Расширение установлено');
+                } else {
+                    Lampa.notify('Не удалось загрузить расширение');
+                }
+
+                renderCatalog(filterCatalog());
+            });
+
+            catalog.appendChild(card);
+        });
+    }
+
+    function filterCatalog() {
+        const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+        if (!query) return catalogCache;
+        return catalogCache.filter(ext => {
+            const name = (ext.name || '').toLowerCase();
+            const desc = (ext.description || '').toLowerCase();
+            const author = (ext.author || '').toLowerCase();
+            return name.includes(query) || desc.includes(query) || author.includes(query);
+        });
+    }
+
+    async function loadCatalog() {
+        catalog.innerHTML = '<div class="store-catalog-loading"><i class="fa-solid fa-spinner fa-spin"></i> Загрузка каталога...</div>';
+
+        try {
+            catalogCache = await Lampa.fetchCatalog();
+            renderCatalog(filterCatalog());
+        } catch (e) {
+            catalog.innerHTML = '<div class="store-catalog-empty"><i class="fa-solid fa-triangle-exclamation"></i><p>Ошибка загрузки каталога</p></div>';
+        }
+    }
+
+    if (btnRefresh) {
+        btnRefresh.addEventListener('click', loadCatalog);
+    }
+
+    if (searchInput) {
+        let searchTimer = null;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => renderCatalog(filterCatalog()), 200);
+        });
+    }
+
+    // Update catalog when extensions added/removed outside store
+    Lampa.on('extensions:changed', () => {
+        if (!storePage.classList.contains('hidden')) {
+            renderCatalog(filterCatalog());
+        }
+    });
+}
+
+function setupSidebarToggle() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    function collapseSidebar() {
+        if (window.innerWidth <= 860) return;
+        sidebar.classList.add('sidebar-collapsed');
+        document.body.classList.add('sidebar-collapsed-body');
+    }
+
+    function expandSidebar() {
+        if (window.innerWidth <= 860) return;
+        sidebar.classList.remove('sidebar-collapsed');
+        document.body.classList.remove('sidebar-collapsed-body');
+    }
+
+    // Expand when mouse enters sidebar
+    sidebar.addEventListener('mouseenter', expandSidebar);
+
+    // Collapse when mouse leaves sidebar and enters main content
+    sidebar.addEventListener('mouseleave', collapseSidebar);
+
+    // Collapse when user clicks a movie card
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.movie-card')) {
+            collapseSidebar();
+        }
+    });
+
+    // Collapse on scroll
+    document.addEventListener('scroll', () => {
+        if (!sidebar.matches(':hover')) {
+            collapseSidebar();
+        }
+    }, { passive: true });
+}
+
 /**
  * Р“Р»Р°РІРЅР°СЏ С„СѓРЅРєС†РёСЏ РёРЅРёС†РёР°Р»РёР·Р°С†РёРё РїСЂРёР»РѕР¶РµРЅРёСЏ
  */
@@ -2622,10 +3233,12 @@ async function initApp() {
     setupSettings();
     setupJackettPage();
     setupExtensions();
+    setupExtensionStore();
     setupDetailsPageHandlers();
     setupTorrentHandlers();
     setupGlobalKeyHandlers();
     setupSpatialNavigation();
+    setupSidebarToggle();
     
     if (window.Lampa) {
         Lampa.utils = {
@@ -2699,7 +3312,8 @@ async function initApp() {
         Lampa.getCustomCategories().forEach(mountCustomCategory);
     }
 
-    loadCategory('home');
+    await loadCategory('home');
+    setupWebOsSupport();
 
     if (window.Lampa) {
         Lampa.emit('ready', { version: '1.0.0' });

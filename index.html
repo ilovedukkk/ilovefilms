@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -16,30 +16,32 @@
     <div class="app-container">
         
         <!-- Р’РµСЂС…РЅРµРµ РјРµРЅСЋ РЅР°РІРёРіР°С†РёРё (Apple TV Style) -->
-        <header class="top-nav">
-            <div class="nav-content">
-                <div class="logo">
-                    <i class="fa-solid fa-film logo-icon"></i>
-                    <span>ilovefilms</span>
-                </div>
-                <ul class="nav-links">
-                    <li class="nav-item active" data-category="home" tabindex="0">Главная</li>
-                    <li class="nav-item" data-category="movies" tabindex="0">Фильмы</li>
-                    <li class="nav-item" data-category="tv" tabindex="0">Сериалы</li>
-                    <li class="nav-item" data-category="discover" tabindex="0">Рекомендации</li>
-                    <li class="nav-item" data-category="history" tabindex="0">История</li>
-                    <li class="nav-item" data-category="watchlist" tabindex="0">Буду смотреть</li>
-                </ul>
-                <div class="nav-actions">
-                    <button class="nav-btn" tabindex="0" aria-label="Поиск" id="btn-search">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                    </button>
-                    <button class="nav-btn" tabindex="0" aria-label="Настройки" id="btn-settings">
-                        <i class="fa-solid fa-gear"></i>
-                    </button>
-                </div>
+        <!-- Боковая панель категорий -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <i class="fa-solid fa-film logo-icon"></i>
+                <span>ilovefilms</span>
             </div>
-        </header>
+            <ul class="nav-links">
+                <li class="nav-item active" data-category="home" tabindex="0"><i class="fa-solid fa-house"></i><span>Главная</span></li>
+                <li class="nav-item" data-category="movies" tabindex="0"><i class="fa-solid fa-clapperboard"></i><span>Фильмы</span></li>
+                <li class="nav-item" data-category="tv" tabindex="0"><i class="fa-solid fa-tv"></i><span>Сериалы</span></li>
+                <li class="nav-item" data-category="action" tabindex="0"><i class="fa-solid fa-explosion"></i><span>Боевики</span></li>
+                <li class="nav-item" data-category="comedy" tabindex="0"><i class="fa-solid fa-face-laugh-squint"></i><span>Комедии</span></li>
+                <li class="nav-item" data-category="horror" tabindex="0"><i class="fa-solid fa-ghost"></i><span>Ужасы</span></li>
+                <li class="nav-item" data-category="anime" tabindex="0"><i class="fa-solid fa-dragon"></i><span>Аниме</span></li>
+                <li class="nav-item" data-category="discover" tabindex="0"><i class="fa-solid fa-compass"></i><span>Рекомендации</span></li>
+                <li class="nav-item" data-category="watchlist" tabindex="0"><i class="fa-solid fa-bookmark"></i><span>Буду смотреть</span></li>
+            </ul>
+            <div class="sidebar-bottom">
+                <button class="nav-btn" tabindex="0" aria-label="Поиск" id="btn-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <button class="nav-btn" tabindex="0" aria-label="Настройки" id="btn-settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </aside>
 
         <!-- РћСЃРЅРѕРІРЅРѕР№ РєРѕРЅС‚РµРЅС‚ -->
         <main class="main-content">
@@ -225,15 +227,15 @@
 
              <div class="settings-group">
                  <h3 class="settings-subtitle">Плеер</h3>
-                 <p class="settings-desc">Выберите, где открывать поток: во встроенном плеере сайта или на отдельной странице, оптимизированной под Media Station X.</p>
+                 <p class="settings-desc">Выберите, где открывать поток: во встроенном плеере сайта или в нативном видеоплеере webOS.</p>
 
                  <div class="settings-options" id="player-target-options">
                      <button class="settings-btn" data-player-target="internal" tabindex="0">
                          <span class="btn-text">Встроенный плеер</span>
                          <i class="fa-solid fa-check checkmark"></i>
                      </button>
-                     <button class="settings-btn" data-player-target="msx" tabindex="0">
-                         <span class="btn-text">Media Station X</span>
+                     <button class="settings-btn" data-player-target="webos" tabindex="0">
+                         <span class="btn-text">Нативный плеер webOS</span>
                          <i class="fa-solid fa-check checkmark"></i>
                      </button>
                  </div>
@@ -260,7 +262,7 @@
 
              <div class="settings-group">
                  <h3 class="settings-subtitle">Расширения</h3>
-                 <p class="settings-desc">Добавляйте расширения по URL, чтобы расширить функциональность приложения.</p>
+                 <p class="settings-desc">Добавляйте расширения по URL или установите из магазина расширений.</p>
                  <div class="ext-add-row">
                      <input type="text" id="input-ext-url" class="settings-input" placeholder="https://example.com/plugin.js" tabindex="0">
                      <button class="btn btn-ext-add" id="btn-ext-add" tabindex="0">
@@ -268,7 +270,13 @@
                      </button>
                  </div>
                  <div class="ext-list" id="ext-list">
-                     <!-- РЎРїРёСЃРѕРє СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹С… СЂР°СЃС€РёСЂРµРЅРёР№ -->
+                     <!-- Список установленных расширений -->
+                 </div>
+                 <div class="settings-input-row" style="margin-top:12px">
+                     <button class="btn btn-glass btn-settings-link" id="btn-open-store" tabindex="0">
+                         <i class="fa-solid fa-store"></i>
+                         <span>Магазин расширений</span>
+                     </button>
                  </div>
              </div>
 
@@ -336,6 +344,57 @@
         </div>
     </section>
 
+    <!-- Магазин расширений -->
+    <section id="store-page" class="store-page hidden">
+        <div class="store-page-shell">
+            <button id="btn-back-store" class="btn btn-icon btn-back" tabindex="0" aria-label="Назад">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+
+            <div class="store-page-head">
+                <div>
+                    <p class="overview-heading">Плагины</p>
+                    <h1 class="store-title">Магазин расширений</h1>
+                </div>
+                <p class="store-lead">Добавляйте источники каталогов и устанавливайте расширения для приложения в один клик.</p>
+            </div>
+
+            <div class="store-grid">
+                <div class="store-panel">
+                    <h2 class="settings-subtitle">Источники</h2>
+                    <p class="settings-desc">Добавьте URL JSON-каталога расширений. Формат: массив объектов с полями name, description, url.</p>
+                    <div class="store-source-add">
+                        <input type="text" id="input-store-source" class="settings-input" placeholder="https://example.com/catalog.json" tabindex="0">
+                        <button class="btn btn-primary store-source-btn" id="btn-store-add-source" tabindex="0">
+                            <i class="fa-solid fa-plus"></i> Добавить
+                        </button>
+                    </div>
+                    <div class="store-source-list" id="store-source-list">
+                        <!-- Список источников -->
+                    </div>
+                </div>
+
+                <div class="store-panel store-panel-catalog">
+                    <div class="store-catalog-header">
+                        <h2 class="settings-subtitle">Каталог</h2>
+                        <button class="btn btn-glass store-refresh-btn" id="btn-store-refresh" tabindex="0">
+                            <i class="fa-solid fa-arrows-rotate"></i> Обновить
+                        </button>
+                    </div>
+                    <div class="store-search-row">
+                        <input type="text" id="input-store-search" class="settings-input" placeholder="Поиск расширений..." tabindex="0">
+                    </div>
+                    <div class="store-catalog" id="store-catalog">
+                        <div class="store-catalog-empty">
+                            <i class="fa-solid fa-box-open"></i>
+                            <p>Добавьте источник, чтобы загрузить каталог расширений</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- РћРІРµСЂР»РµР№ СЃРїРёСЃРєР° С‚РѕСЂСЂРµРЅС‚РѕРІ -->
     <div id="torrent-modal" class="torrent-modal hidden">
         <div class="torrent-content">
@@ -347,6 +406,9 @@
             </div>
             <div class="torrent-filters" id="torrent-filters">
                 <input type="text" id="torrent-filter-query" class="settings-input torrent-filter-input" placeholder="Фильтр по названию" tabindex="0">
+                <select id="torrent-filter-parser" class="settings-input torrent-filter-select" tabindex="0" title="Парсер для поиска раздач">
+                    <option value="auto">Авто</option>
+                </select>
                 <select id="torrent-filter-quality" class="settings-input torrent-filter-select" tabindex="0">
                     <option value="all">Любое качество</option>
                     <option value="2160">4K / 2160p</option>
@@ -403,9 +465,9 @@
                     <i class="fa-solid fa-up-right-from-square"></i>
                     <span>Внешний плеер</span>
                 </button>
-                <button class="btn btn-player-action" id="btn-player-msx" tabindex="0" title="Открыть поток на отдельной странице Media Station X">
+                <button class="btn btn-player-action" id="btn-player-webos" tabindex="0" title="Открыть поток в нативном плеере webOS">
                     <i class="fa-solid fa-tv"></i>
-                    <span>Media Station X</span>
+                    <span>Плеер webOS</span>
                 </button>
                 <button class="btn btn-player-action" id="btn-player-copy" tabindex="0" title="Скопировать ссылку для вставки в плеер">
                     <i class="fa-solid fa-copy"></i>
